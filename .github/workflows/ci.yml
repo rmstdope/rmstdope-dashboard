@@ -1,0 +1,89 @@
+name: Dashboard checks and image
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci && npm test
+      - run: npx playwright install --with-deps chromium
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          platforms: linux/amd64
+          tags: ghcr.io/rmstdope/rmstdope-dashboard:${{ github.sha }}
+          build-args: REVISION=${{ github.sha }}
+      - name: Start production image
+        run: |
+          mkdir -p /tmp/dashboard-status
+          docker run -d --name dashboard-test -p 127.0.0.1:18080:8080 \
+            --mount type=bind,src=/tmp/dashboard-status,dst=/status,readonly \
+            ghcr.io/rmstdope/rmstdope-dashboard:${{ github.sha }}
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18080/healthz; then exit 0; fi
+            sleep 1
+          done
+          docker logs dashboard-test
+          exit 1
+      - run: npm run test:browser
+      - name: Verify atomic snapshot publication through read-only directory mount
+        run: |
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/status.json)" = 404
+          printf '{"schemaVersion":1,"apps":[]}\n' > /tmp/dashboard-status/candidate
+          mv /tmp/dashboard-status/candidate /tmp/dashboard-status/status.json
+          curl -fsS http://127.0.0.1:18080/status.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["schemaVersion"] == 1'
+          printf '{"schemaVersion":2,"apps":[]}\n' > /tmp/dashboard-status/candidate
+          mv /tmp/dashboard-status/candidate /tmp/dashboard-status/status.json
+          curl -fsS http://127.0.0.1:18080/status.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["schemaVersion"] == 2'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failures
+          path: test-results/
+      - name: Stop test container
+        if: always()
+        run: docker rm -f dashboard-test || true
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tested image and immutable manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          REVISION: ${{ github.sha }}
+        run: |
+          image="ghcr.io/rmstdope/rmstdope-dashboard:$REVISION"
+          docker push "$image"
+          IMAGE="$image" python3 - <<'PY'
+          import json, os, subprocess
+          details = json.loads(subprocess.check_output(
+              ["docker", "image", "inspect", os.environ["IMAGE"]]))[0]
+          digest = next(ref for ref in details["RepoDigests"]
+                        if ref.startswith("ghcr.io/rmstdope/rmstdope-dashboard@sha256:"))
+          with open("deployment.json", "w") as stream:
+              json.dump({"revision": os.environ["REVISION"], "images": {"web": digest}}, stream)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: deployment-manifest
+          path: deployment.json
+          retention-days: 90

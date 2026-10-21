@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark">
+    <title>rmstdope / apps</title>
+    <link rel="stylesheet" href="/style.css">
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">rmstdope<span>.eu</span></a>
+      <span class="eyebrow">APPLICATION DIRECTORY</span>
+    </header>
+    <main>
+      <div class="intro">
+        <p class="eyebrow">YOUR APPS, AT A GLANCE</p>
+        <h1>A home for<br>everything running.</h1>
+        <p class="subtitle">Live application health, deployed versions, and a quick way in.</p>
+      </div>
+      <section class="overview" aria-label="Collection status">
+        <div><span id="summary" role="status">Loading application status...</span><p id="updated">Waiting for first snapshot</p></div>
+        <button id="refresh" type="button">Refresh status</button>
+      </section>
+      <p id="notice" class="notice" role="status" hidden></p>
+      <section id="apps" class="apps" aria-label="Applications"></section>
+      <noscript><p class="notice">JavaScript is required to display application status.</p></noscript>
+    </main>
+    <footer>Public, read-only status. Checks run on the host every minute.<br>Application links open in a new tab.</footer>
+  </body>
+</html>
