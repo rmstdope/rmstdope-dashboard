@@ -61,3 +61,34 @@ test("actual container exposes only intended files and headers", async ({ reques
     expect((await request.get(path)).status()).toBe(404);
   }
 });
+
+test("compact cards distinguish tag and merge automation and label revisions", async ({ page }) => {
+  const merge = { ...app, name: "dashboard", url: "https://dashboard.rmstdope.eu",
+    version: null, updateSource: "merge" };
+  await page.route("**/status.json", route => route.fulfill({
+    json: feed([{ ...app, updateSource: "tag" }, merge]),
+  }));
+  await page.goto("/");
+  await expect(page.getByText("Automatic (tag)", { exact: true })).toBeVisible();
+  await expect(page.getByText("Automatic (merge)", { exact: true })).toBeVisible();
+  const cards = page.locator("article");
+  await expect(cards.first().locator(".card-top h2")).toHaveText("Atlantis HUD");
+  await expect(cards.first().locator(".card-top .badge")).toHaveText("Healthy");
+  await expect(cards.nth(1).locator("dt").filter({ hasText: /^Version$/ })).toHaveCount(0);
+  await expect(cards.nth(1).locator("dt").filter({ hasText: /^Revision$/ })).toHaveCount(1);
+  await expect(page.locator(".intro, .app-mark")).toHaveCount(0);
+});
+
+test("timestamps use Swedish format regardless of browser locale", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, locale: "en-US", timezoneId: "Europe/Stockholm" });
+  try {
+    const page = await context.newPage();
+    await page.route("**/status.json", route => route.fulfill({ json: feed() }));
+    await page.goto("/");
+    await expect(page.locator("#updated")).toHaveText(
+      /^Last collected \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    await expect(page.getByText("2026-01-01 01:00:00", { exact: true })).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});

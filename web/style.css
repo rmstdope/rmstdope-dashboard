@@ -6,23 +6,19 @@ header { display: flex; justify-content: space-between; align-items: center; bor
 .brand { color: #f0f5fa; font-weight: 750; font-size: 21px; text-decoration: none; letter-spacing: -.7px; }
 .brand span { color: #69ddbb; }
 .eyebrow { font-size: 11px; letter-spacing: 2px; font-weight: 650; color: #96a9bb; }
-.intro { padding: 34px 0; }
-h1 { font-size: clamp(36px, 5vw, 58px); line-height: 1.08; letter-spacing: -2px; margin: 16px 0; }
-.subtitle { color: #acb9c7; line-height: 1.6; }
-.overview { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 22px 0; border-top: 1px solid #29323e; }
+.overview { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 0 0 22px; }
 #summary { font-weight: 650; }
 #updated { color: #96a9bb; font-size: 13px; margin: 6px 0 0; }
 button { background: #1c2632; border: 1px solid #435268; padding: 10px 15px; border-radius: 8px; color: #e7edf3; font: inherit; cursor: pointer; }
 button:disabled { opacity: .6; cursor: progress; }
 .apps { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 20px; }
 .card { background: #18212b; border: 1px solid #334151; border-radius: 16px; padding: 24px; display: flex; flex-direction: column; }
-.card-top { display: flex; align-items: center; justify-content: space-between; }
-.app-mark { display: grid; place-items: center; width: 42px; height: 42px; background: #253b40; color: #8de5cd; font-size: 13px; font-weight: 700; border-radius: 12px; }
-.badge { font-size: 12px; padding: 5px 10px; border-radius: 100px; }
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
+.badge { font-size: 12px; padding: 5px 10px; border-radius: 100px; flex-shrink: 0; }
 .healthy { background: #1c4035; color: #91edc5; }
 .unhealthy { background: #512a30; color: #ffb5be; }
 .unknown { background: #3c3b2d; color: #e4d7a3; }
-h2 { margin: 22px 0 4px; font-size: 23px; }
+h2 { margin: 0; font-size: 23px; overflow-wrap: anywhere; min-width: 0; }
 .hostname { color: #a2b3c5; font-size: 13px; margin: 0 0 22px; overflow-wrap: anywhere; }
 dl { margin: 0 0 26px; font-size: 13px; }
 dl div { display: flex; justify-content: space-between; gap: 16px; padding: 9px 0; border-bottom: 1px solid #2b3744; }

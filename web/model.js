@@ -22,6 +22,8 @@ export function validateSnapshot(data) {
         !states.health.includes(app.health) || !states.health.includes(app.publicHealth) ||
         !states.health.includes(app.containerHealth) || !states.status.includes(app.status) ||
         !states.automation.includes(app.automation) || typeof app.recoveryRequired !== "boolean" ||
+        !(app.updateSource === undefined || app.updateSource === null ||
+          ["merge", "tag"].includes(app.updateSource)) ||
         !(app.revision === null || /^[a-f0-9]{12}$/.test(app.revision)) ||
         !(app.version === null || /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(app.version)) ||
         !(app.deployedAt === null || timestamp(app.deployedAt))) {
