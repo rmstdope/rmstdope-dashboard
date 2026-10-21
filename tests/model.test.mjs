@@ -41,3 +41,10 @@ test("supports registered aliases and consecutive/trailing hyphens in app names"
   validateSnapshot({ ...snapshot, apps: [{ ...app, name: "foo--bar-", url: "https://alias.rmstdope.eu" }] });
   assert.equal(title("foo--bar-"), "Foo Bar");
 });
+
+test("accepts old snapshots and validates optional update source", () => {
+  for (const updateSource of [undefined, null, "merge", "tag"]) {
+    validateSnapshot({ ...snapshot, apps: [{ ...app, updateSource }] });
+  }
+  assert.throws(() => validateSnapshot({ ...snapshot, apps: [{ ...app, updateSource: "arbitrary" }] }));
+});

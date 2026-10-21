@@ -39,7 +39,7 @@ function render() {
   const healthy = snapshot.apps.filter(app => app.health === "healthy").length;
   summary.textContent = stale ? "Status unknown - data is not current" :
     `${healthy} of ${snapshot.apps.length} applications healthy`;
-  updated.textContent = `Last collected ${new Date(snapshot.generatedAt).toLocaleString()}`;
+  updated.textContent = `Last collected ${new Date(snapshot.generatedAt).toLocaleString("sv-SE")}`;
   notice.hidden = !stale;
   notice.textContent = failed ?
     "Status refresh failed. Showing the last snapshot; current health is unknown." :
@@ -53,18 +53,20 @@ function render() {
     const card = element("article", "card");
     const top = element("div", "card-top");
     const badge = element("span", `badge ${health}`, labels[health]);
-    top.append(element("span", "app-mark", app.name.slice(0, 2).toUpperCase()), badge);
-    card.append(top, element("h2", "", title(app.name)),
+    top.append(element("h2", "", title(app.name)), badge);
+    card.append(top,
       element("p", "hostname", new URL(app.url).hostname));
     if (app.recoveryRequired) card.append(element("p", "warning", "Recovery required"));
     const details = element("dl");
     detail(details, "Status", stale ? "Unknown (stale)" : labels[app.status]);
-    detail(details, "Version", app.version || app.revision || "Not available");
-    if (app.version && app.revision) detail(details, "Revision", app.revision);
+    if (app.version) detail(details, "Version", app.version);
+    detail(details, "Revision", app.revision || "Not available");
     detail(details, "Public HTTPS", stale ? "Unknown" : labels[app.publicHealth]);
     detail(details, "Container", stale ? "Unknown" : labels[app.containerHealth]);
-    detail(details, "Deployment", app.deployedAt ? new Date(app.deployedAt).toLocaleString() : "Not available");
-    detail(details, "Updates", `${labels[app.automation]}${stale ? " (last known)" : ""}`);
+    detail(details, "Deployment", app.deployedAt ? new Date(app.deployedAt).toLocaleString("sv-SE") : "Not available");
+    const updates = app.automation === "enabled" && app.updateSource ?
+      `Automatic (${app.updateSource})` : labels[app.automation];
+    detail(details, "Updates", `${updates}${stale ? " (last known)" : ""}`);
     const link = element("a", "launch", "Launch application");
     link.href = app.url;
     link.target = "_blank";
