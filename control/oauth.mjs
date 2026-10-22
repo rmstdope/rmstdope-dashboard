@@ -1,7 +1,8 @@
 import { hash } from "./store.mjs";
 
-const AUTHORIZE = "https://github.com/login/oauth/authorize";
-const TOKEN = "https://github.com/login/oauth/access_token";
+export const ISSUER = "https://github.com/login/oauth";
+const AUTHORIZE = `${ISSUER}/authorize`;
+const TOKEN = `${ISSUER}/access_token`;
 const USER = "https://api.github.com/user";
 
 export function authorizationURL(config, attempt) {

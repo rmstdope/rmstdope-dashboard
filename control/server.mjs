@@ -5,7 +5,7 @@ import { timingSafeEqual } from "node:crypto";
 import { isIP } from "node:net";
 import { configuration } from "./config.mjs";
 import { Store, RECENT } from "./store.mjs";
-import { authorizationURL, authenticate } from "./oauth.mjs";
+import { authorizationURL, authenticate, ISSUER } from "./oauth.mjs";
 import {
   execute, ACTIONS, FRESH_ACTIONS, protectedName, appName,
   cleanApp, cleanJob, cleanPreview,
@@ -169,7 +169,9 @@ export function createControlServer(config, dependencies = {}) {
           parameter_count: url.searchParams.getAll("state").length !== 1 ||
             url.searchParams.getAll("code").length !== 1,
           code_format: !code || !/^[a-zA-Z0-9_.-]{1,256}$/.test(code),
-          unexpected_parameters: [...url.searchParams.keys()].some(key => !["state", "code"].includes(key)),
+          issuer: url.searchParams.has("iss") && (
+            url.searchParams.getAll("iss").length !== 1 || url.searchParams.get("iss") !== ISSUER),
+          unexpected_parameters: [...url.searchParams.keys()].some(key => !["state", "code", "iss"].includes(key)),
         }).filter(([, rejected]) => rejected).map(([reason]) => reason);
         if (invalid.length) {
           reportOAuthFailure(invalid.join(","));

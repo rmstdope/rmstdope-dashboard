@@ -101,6 +101,21 @@ test("callback diagnostics contain fixed categories, never codes or cookie value
   assert.equal(reasons.join().includes("private"), false);
 });
 
+test("OAuth callback rejects foreign, empty and duplicate issuers before code exchange", async t => {
+  let exchanges = 0;
+  const f = await fixture(t, { authenticate: async () => { exchanges++; return actor; } });
+  const attempt = f.store.startOAuth();
+  const callback = `/auth/callback?state=${attempt.state}&code=test-code`;
+  const headers = { Cookie: `__Host-control-oauth=${attempt.binding}` };
+  for (const suffix of ["&iss=https%3A%2F%2Fevil.example", "&iss=",
+    "&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth&iss=https%3A%2F%2Fgithub.com%2Flogin%2Foauth"]) {
+    assert.equal((await f.request(callback + suffix, { auth: false, headers })).status, 400);
+  }
+  assert.equal(exchanges, 0);
+  assert.equal((await f.request(callback, { auth: false, headers })).status, 303);
+  assert.equal(exchanges, 1);
+});
+
 test("configuration fails closed without explicit admins, secrets and HTTPS canonical origin", () => {
   const env = {
     CONTROL_ORIGIN: origin, ADMIN_GITHUB_IDS: actor, GITHUB_CLIENT_ID: "id",
@@ -205,7 +220,7 @@ test("OAuth callback rejects forged/replayed state and rotates host-only secure 
   const state = new URL(login.headers.location).searchParams.get("state");
   const binding = login.headers["set-cookie"][0].split(";")[0];
   assert.match(binding, /^__Host-control-oauth=/);
-  const callback = `/auth/callback?state=${state}&code=test-code`;
+  const callback = `/auth/callback?state=${state}&code=test-code&iss=${encodeURIComponent("https://github.com/login/oauth")}`;
   assert.equal((await f.request(callback, { auth: false })).status, 400);
   const response = await f.request(callback, { headers: {
     Cookie: `${binding}; __Host-control-session=${f.id}`,
