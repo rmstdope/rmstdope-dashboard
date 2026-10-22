@@ -382,6 +382,18 @@ test("executor errors are mapped to fixed messages, malformed and unsafe output 
   assert.throws(() => cleanJob({ id: jobId, app: "example", action: "shell" }));
 });
 
+test("executor lock contention remains distinguishable from unavailability", async t => {
+  for (const [code, status] of [["busy", 409], ["unavailable", 503]]) {
+    const control = await fixture(t, { execute: async () => ({
+      error: { code, message: "SECRET_TOKEN /private/path" },
+    }) });
+    const result = await control.request("/api/apps");
+    assert.equal(result.status, status);
+    assert.equal(result.json.error.code, code);
+    assert.equal(result.text.includes("SECRET_TOKEN"), false);
+  }
+});
+
 test("Python fractional epoch seconds and offline truncated revisions are accepted without weakening bounds", () => {
   assert.equal(cleanApp({ ...app, desired: "offline", revision: "a".repeat(12) }).revision, "a".repeat(12));
   const job = { id: jobId, app: "example", action: "pause", status: "queued",
