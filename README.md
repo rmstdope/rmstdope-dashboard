@@ -11,6 +11,14 @@ public HTTPS/container health, status, version or short revision, deployment
 time, automation enabled/paused/manual and recovery-required indication. Launch
 links open in a new tab with noopener/noreferrer.
 
+Each card includes a **Type** row, such as **Frontend (stateless)** or
+**Fullstack (stateful)**. The collector supplies optional `applicationType`
+(`frontend`/`fullstack`) and `stateful` (boolean) fields from registered metadata.
+These are independent: a fullstack app can be stateless. Older feeds remain
+usable and show Unknown for missing classification, not an inferred type.
+The metadata needs an explicitly installed collector update in infrastructure;
+the frontend alone cannot determine whether an app stores server-side data.
+
 The host collector publishes an allowlisted schemaVersion=1 JSON snapshot every
 minute. The browser requests `/status.json` every 30 seconds; data older than
 three minutes or a failed refresh shows **unknown**, never current healthy.
