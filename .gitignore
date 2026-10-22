@@ -7,3 +7,5 @@ test-results/
 .control-browser-*/
 .ci-control/
 .ci-dashboard-status/
+contract-test-*/
+.ci-infra/

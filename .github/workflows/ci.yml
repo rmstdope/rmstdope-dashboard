@@ -100,6 +100,20 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci && npm test
+      - name: Check out reviewed executor contract
+        uses: actions/checkout@v4
+        with:
+          repository: rmstdope/rmstdope-infra
+          ref: c351a5bf43877092f1e4a464c64088244ff084c8
+          path: .ci-infra
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Verify real Node API against Python executor
+        run: npm run test:contract
+        env:
+          INFRA_CHECKOUT: ${{ github.workspace }}/.ci-infra
       - run: npx playwright install --with-deps chromium
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6

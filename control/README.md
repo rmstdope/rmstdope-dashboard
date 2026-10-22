@@ -203,6 +203,18 @@ authentication/session/CSRF routes, mock OAuth responses, real Unix framing and
 the complete API-to-socket confirmation lifecycle. No live OAuth credentials
 are needed. CI also tests both production images at desktop/mobile widths.
 
+The persistent cross-repository regression is `tests/cross-contract.mjs` with
+`tests/fixtures/python-executor.py`: it starts the actual Python
+`control.Executor`/`Server` and actual Node HTTP API, without mocking either
+protocol implementation. CI checks out the reviewed infra commit
+`c351a5bf43877092f1e4a464c64088244ff084c8` and runs `npm run test:contract`.
+To reproduce locally, set `INFRA_CHECKOUT` to that checkout and `PYTHON` to its
+`.venv/bin/python` (or a compatible Python 3.12+). Only disposable directories
+inside this repository are written; there are no Docker operations or live
+credentials. Update the pinned commit deliberately when reviewing contract
+changes. The regression includes fractional timestamps, offline truncated
+revisions, actual pause job execution, idempotency and session actor attribution.
+
 Only successful **main push** CI publishes the tested control image and the
 separate **`control-deployment-manifest`** artifact (`control-deployment.json`,
 `{revision,images:{web:"…@sha256:…"}}`). PRs do not publish. The existing public
