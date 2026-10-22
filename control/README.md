@@ -206,8 +206,16 @@ are needed. CI also tests both production images at desktop/mobile widths.
 The persistent cross-repository regression is `tests/cross-contract.mjs` with
 `tests/fixtures/python-executor.py`: it starts the actual Python
 `control.Executor`/`Server` and actual Node HTTP API, without mocking either
-protocol implementation. CI checks out the reviewed infra commit
-`c351a5bf43877092f1e4a464c64088244ff084c8` and runs `npm run test:contract`.
+protocol implementation. The separate `executor-contract` CI job checks out the
+reviewed infra commit `c351a5bf43877092f1e4a464c64088244ff084c8` and runs
+`npm run test:contract` **only when private-repository access is configured**.
+The ordinary dashboard `GITHUB_TOKEN` cannot read the private infra repository.
+An authorized operator can provision `INFRA_CONTRACT_READ_TOKEN` as an Actions
+secret with **contents:read only for rmstdope-infra**, no write/deployment access.
+Checkout does not persist credentials. Without this secret, the job explicitly
+reports **NOT RUN** in its notice/summary; a green image/browser run does not
+claim hosted actual-executor coverage. Do not change repository visibility or
+reuse production deployment credentials to enable this test.
 To reproduce locally, set `INFRA_CHECKOUT` to that checkout and `PYTHON` to its
 `.venv/bin/python` (or a compatible Python 3.12+). Only disposable directories
 inside this repository are written; there are no Docker operations or live

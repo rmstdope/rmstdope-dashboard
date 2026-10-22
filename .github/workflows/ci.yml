@@ -100,20 +100,6 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci && npm test
-      - name: Check out reviewed executor contract
-        uses: actions/checkout@v4
-        with:
-          repository: rmstdope/rmstdope-infra
-          ref: c351a5bf43877092f1e4a464c64088244ff084c8
-          path: .ci-infra
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Verify real Node API against Python executor
-        run: npm run test:contract
-        env:
-          INFRA_CHECKOUT: ${{ github.workspace }}/.ci-infra
       - run: npx playwright install --with-deps chromium
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
@@ -187,3 +173,41 @@ jobs:
           name: control-deployment-manifest
           path: control-deployment.json
           retention-days: 90
+
+  executor-contract:
+    runs-on: ubuntu-latest
+    env:
+      INFRA_READ_TOKEN: ${{ secrets.INFRA_CONTRACT_READ_TOKEN }}
+    steps:
+      - name: Report private-repository access requirement
+        if: env.INFRA_READ_TOKEN == ''
+        run: |
+          echo "::notice::Actual cross-repository contract check NOT RUN: configure INFRA_CONTRACT_READ_TOKEN with read-only contents access to rmstdope-infra. The local reproducible harness remains available."
+          echo "### Actual executor contract: NOT RUN" >> "$GITHUB_STEP_SUMMARY"
+          echo "Private infra checkout requires the separately provisioned read-only INFRA_CONTRACT_READ_TOKEN secret. Image, browser and Node contract-regression checks are independent." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@v4
+        if: env.INFRA_READ_TOKEN != ''
+        with:
+          persist-credentials: false
+      - name: Check out reviewed private executor contract
+        if: env.INFRA_READ_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: rmstdope/rmstdope-infra
+          ref: c351a5bf43877092f1e4a464c64088244ff084c8
+          path: .ci-infra
+          token: ${{ env.INFRA_READ_TOKEN }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        if: env.INFRA_READ_TOKEN != ''
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        if: env.INFRA_READ_TOKEN != ''
+        with:
+          python-version: "3.12"
+      - name: Verify real Node API against Python executor
+        if: env.INFRA_READ_TOKEN != ''
+        run: npm run test:contract
+        env:
+          INFRA_CHECKOUT: ${{ github.workspace }}/.ci-infra
