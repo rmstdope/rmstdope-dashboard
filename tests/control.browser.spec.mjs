@@ -229,6 +229,46 @@ test("failed refresh makes overview health and application badges unknown", asyn
   await expect(page.locator("#message")).toContainText("may be stale");
 });
 
+test("scheduled refresh clears a recovered failure without clearing operation feedback", async ({ page }) => {
+  await page.clock.install();
+  await setup(page, { apps: [{ ...app, health: "healthy" }], previewFailure: true });
+  await expect(page.locator("#health-value")).toHaveText("1 / 1");
+  const failRefresh = route => route.fulfill({ status: 503, json: {} });
+  await page.route("**/api/apps", failRefresh);
+  await page.clock.runFor(5100);
+  await expect(page.locator("#message")).toContainText("may be stale");
+  await expect(page.locator("#health-value")).toHaveText("Unknown");
+
+  await page.unroute("**/api/apps", failRefresh);
+  await page.clock.runFor(5000);
+  await expect(page.locator("#health-value")).toHaveText("1 / 1");
+  await expect(page.locator(".status-healthy")).toBeVisible();
+  await expect(page.locator("#updated")).toHaveText(/^Last refreshed /);
+  await expect(page.locator("#message")).toBeEmpty();
+
+  await page.getByRole("button", { name: "Preview operation" }).click();
+  await expect(page.locator("#message")).toHaveText("Preview temporarily unavailable.");
+  await page.clock.runFor(5000);
+  await expect(page.locator("#message")).toHaveText("Preview temporarily unavailable.");
+});
+
+test("recovery preserves operation feedback that replaced the refresh warning", async ({ page }) => {
+  await page.clock.install();
+  await setup(page, { apps: [app], previewFailure: true });
+  await expect(page.locator("#health-value")).toHaveText("0 / 1");
+  const failRefresh = route => route.fulfill({ status: 503, json: {} });
+  await page.route("**/api/apps", failRefresh);
+  await page.clock.runFor(5100);
+  await expect(page.locator("#message")).toContainText("may be stale");
+  await page.getByRole("button", { name: "Preview operation" }).click();
+  await expect(page.locator("#message")).toHaveText("Preview temporarily unavailable.");
+
+  await page.unroute("**/api/apps", failRefresh);
+  await page.clock.runFor(5000);
+  await expect(page.locator("#health-value")).toHaveText("0 / 1");
+  await expect(page.locator("#message")).toHaveText("Preview temporarily unavailable.");
+});
+
 for (const previewFailure of [false, true]) {
   test(`filtering during a ${previewFailure ? "failed" : "successful"} preview restores current operation buttons`, async ({ page }) => {
     let release;

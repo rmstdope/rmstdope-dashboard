@@ -1,6 +1,7 @@
 import { collection, title } from "/collection.js";
 
 const $ = selector => document.querySelector(selector);
+const refreshFailureMessage = "Refresh failed. Displayed state may be stale. Operations require a new executor preview.";
 const actions = {
   offline: "Take offline (maintenance)", online: "Bring online",
   pause: "Pause automatic updates", resume: "Resume automatic updates",
@@ -228,12 +229,12 @@ async function refresh(showMessage = true) {
       renderApps(applications.apps);
       renderJobs(history.jobs);
       $("#updated").textContent = `Last refreshed ${new Date().toLocaleString("sv-SE")}`;
-      if (showMessage) message("");
+      if (showMessage || $("#message").textContent === refreshFailureMessage) message("");
     }
   } catch {
     refreshFailed = true;
     if (session) renderApps(latestApps);
-    message("Refresh failed. Displayed state may be stale. Operations require a new executor preview.");
+    message(refreshFailureMessage);
     $("#updated").textContent = "State unknown — refresh failed";
   } finally { loading = false; $("#refresh").disabled = false; }
 }
