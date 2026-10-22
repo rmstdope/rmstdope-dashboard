@@ -68,7 +68,9 @@ runtime, provisions DNS/TLS/proxy routing and starts this service:
    Unix socket connections and sees socket replacement on executor restart.
    Never mount the Docker socket.
 4. Supply these **runtime-only** settings using the reviewed root-protected
-   `${SECRETS_DIR}/web.env` mechanism; never commit real values or use build args:
+   `${SECRETS_DIR}/control.env` mechanism; never commit real values or use build args.
+   The reviewed Compose definition fixes the origin and mount paths directly;
+   the protected file supplies the client ID, client secret and admin IDs:
 
    | Variable | Value |
    | --- | --- |
@@ -193,3 +195,9 @@ image and `deployment-manifest` remain separate and unchanged. The control app
 has **no automatic self-update registration**: installation/update requires the
 reviewed exact digest and separately authorized host workflow. This PR is not
 authorization to merge, install, create live OAuth credentials or deploy.
+
+The companion host runtime and explicit installation procedure are in
+[`rmstdope-infra/docs/control-panel.md`](https://github.com/rmstdope/rmstdope-infra/blob/main/docs/control-panel.md).
+The single `web` process uses the existing static topology with `stateful: true`
+for durable sessions; the public collector's “Frontend (stateful)” label describes
+that deployment topology, not the absence of server-side authentication.

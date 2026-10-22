@@ -9,7 +9,7 @@ import { configuration } from "../control/config.mjs";
 import { Store, IDLE, MAX_AGE, RECENT } from "../control/store.mjs";
 import { authenticate, authorizationURL } from "../control/oauth.mjs";
 import { createControlServer } from "../control/server.mjs";
-import { execute, LIMIT, cleanApp, cleanJob } from "../control/executor.mjs";
+import { execute, LIMIT, cleanApp, cleanJob, cleanPreview } from "../control/executor.mjs";
 
 let counter = 0;
 const actor = "123456";
@@ -41,11 +41,11 @@ async function fixture(t, overrides = {}) {
     if (request.operation === "list") return { apps: [app, { ...app, name: "dashboard", protected: false }] };
     if (request.operation === "preview") return { preview: {
       id: previewId, app: request.app, action: request.action, revision: app.revision,
-      version: app.version, expiresAt: Math.floor(now() / 1000) + 120,
+      version: app.version, expiresAt: now() / 1000 + 120.125,
       images: { web: "secret-digest" }, warning: "private executor detail", currentRelease: "release",
     } };
     const job = { id: jobId, app: app.name, action: "rollback", status: "queued",
-      createdAt: Math.floor(now() / 1000), updatedAt: Math.floor(now() / 1000),
+      createdAt: now() / 1000 + 0.125, updatedAt: now() / 1000 + 0.25,
       message: "private raw stderr", revision: app.revision, actor, private: "secret" };
     if (request.operation === "jobs") return { jobs: [job] };
     return { job };
@@ -278,7 +278,7 @@ test("confirmation from another session or expired preview never reaches executo
   assert.equal((await f.request("/api/submit", { method: "POST", body, headers: {
     Cookie: `__Host-control-session=${second}`, "X-CSRF-Token": session.csrf,
   } })).status, 409);
-  f.advance(120_000);
+  f.advance(121_000);
   assert.equal((await f.request("/api/submit", { method: "POST", body })).status, 409);
   assert.equal(f.calls.filter(call => call.operation === "submit").length, 0);
 });
@@ -323,6 +323,20 @@ test("executor errors are mapped to fixed messages, malformed and unsafe output 
   assert.equal((await malformed.request("/api/apps")).status, 503);
   assert.equal(cleanApp({ ...app, desired: "offline", health: "healthy" }).health, "unknown");
   assert.throws(() => cleanJob({ id: jobId, app: "example", action: "shell" }));
+});
+
+test("Python fractional epoch seconds and offline truncated revisions are accepted without weakening bounds", () => {
+  assert.equal(cleanApp({ ...app, desired: "offline", revision: "a".repeat(12) }).revision, "a".repeat(12));
+  const job = { id: jobId, app: "example", action: "pause", status: "queued",
+    createdAt: 1800000000.123, updatedAt: 1800000000.456, revision: app.revision };
+  assert.equal(cleanJob(job).createdAt, job.createdAt);
+  const preview = { id: previewId, app: "example", action: "pause",
+    expiresAt: 1800000300.789, revision: app.revision, version: null };
+  assert.equal(cleanPreview(preview, "example", "pause", 1800000000000).expiresAt, preview.expiresAt);
+  for (const invalid of [NaN, Infinity, -1, "1800000000", Number.MAX_SAFE_INTEGER + 1]) {
+    assert.throws(() => cleanJob({ ...job, createdAt: invalid }));
+    assert.throws(() => cleanPreview({ ...preview, expiresAt: invalid }, "example", "pause", 1800000000000));
+  }
 });
 
 test("real Unix socket contract handles split lines and rejects oversized, invalid, incomplete replies", async t => {

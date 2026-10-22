@@ -6,7 +6,7 @@ import { configuration } from "./config.mjs";
 import { Store, RECENT } from "./store.mjs";
 import { authorizationURL, authenticate } from "./oauth.mjs";
 import {
-  execute, ACTIONS, FRESH_ACTIONS, protectedName, appName, identifier,
+  execute, ACTIONS, FRESH_ACTIONS, protectedName, appName,
   cleanApp, cleanJob, cleanPreview,
 } from "./executor.mjs";
 
@@ -202,7 +202,7 @@ export function createControlServer(config, dependencies = {}) {
         }
         if (url.pathname === "/api/submit") {
           exactKeys(body, ["previewId", "idempotencyKey"]);
-          if (!identifier(body.previewId) || !/^[a-zA-Z0-9_-]{16,128}$/.test(body.idempotencyKey)) {
+          if (!/^[a-f0-9]{32}$/.test(body.previewId) || !/^[a-zA-Z0-9-]{16,80}$/.test(body.idempotencyKey)) {
             fail(400, "invalid_request", "Invalid confirmation identifiers.");
           }
           const preview = store.update(sessionId, entry => {

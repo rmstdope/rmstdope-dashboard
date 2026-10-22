@@ -11,6 +11,8 @@ export const identifier = value => typeof value === "string" && /^[a-zA-Z0-9_-]{
 const revision = value => value === null || (typeof value === "string" && /^[a-f0-9]{7,64}$/.test(value));
 const version = value => value === null || (typeof value === "string" && /^v\d+\.\d+\.\d+$/.test(value));
 const statuses = ["queued", "running", "succeeded", "failed", "interrupted"];
+const epoch = value => typeof value === "number" && Number.isFinite(value) &&
+  value >= 0 && value <= Number.MAX_SAFE_INTEGER;
 const messages = {
   queued: "Waiting for the executor.", running: "Operation in progress.",
   succeeded: "Operation completed.", failed: "Operation failed. Inspect host recovery status.",
@@ -50,7 +52,7 @@ export function cleanApp(app) {
 export function cleanJob(job) {
   if (!job || !identifier(job.id) || !appName(job.app) ||
       !ACTIONS.includes(job.action) || !statuses.includes(job.status) ||
-      !Number.isSafeInteger(job.createdAt) || !Number.isSafeInteger(job.updatedAt) ||
+      !epoch(job.createdAt) || !epoch(job.updatedAt) ||
       !revision(job.revision)) throw new Error("Invalid executor job");
   return Object.fromEntries(Object.entries({
     id: job.id, app: job.app, action: job.action, status: job.status,
@@ -60,7 +62,7 @@ export function cleanJob(job) {
 }
 export function cleanPreview(preview, app, action, now) {
   if (!preview || !identifier(preview.id) || preview.app !== app || preview.action !== action ||
-      !Number.isSafeInteger(preview.expiresAt) || preview.expiresAt <= Math.floor(now / 1000) ||
+      !epoch(preview.expiresAt) || preview.expiresAt <= now / 1000 ||
       preview.expiresAt > Math.floor(now / 1000) + 900 ||
       !revision(preview.revision) || !version(preview.version)) throw new Error("Invalid executor preview");
   return {
