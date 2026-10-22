@@ -12,6 +12,7 @@ const selectedActions = new Map();
 let renderedApps = null;
 let latestApps = [];
 let refreshFailed = false;
+let refreshDeferred = false;
 const visibleApps = collection(() => renderApps(latestApps), app => app.profile);
 function node(tag, value, className) {
   const result = document.createElement(tag);
@@ -63,7 +64,10 @@ async function api(path, body) {
   const result = JSON.parse(new TextDecoder().decode(bytes));
   if (!response.ok) {
     if (response.status === 401) account(null);
-    throw new Error(result.error?.message || "Control request failed.");
+    const error = new Error(result.error?.message || "Control request failed.");
+    error.code = result.error?.code;
+    error.path = path;
+    throw error;
   }
   return result;
 }
@@ -77,14 +81,16 @@ function renderApps(apps) {
   const healthy = apps.filter(app => app.desired === "online" && app.health === "healthy").length;
   const offline = apps.filter(app => app.desired === "offline").length;
   const paused = apps.filter(app => app.automation === "paused").length;
-  $("#health-value").textContent = refreshFailed ? "Unknown" : `${healthy} / ${apps.length}`;
+  $("#health-value").textContent = refreshFailed || (refreshDeferred && !apps.length)
+    ? "Unknown" : `${healthy} / ${apps.length}`;
   $("#automation-value").textContent = apps.filter(app => app.automation === "enabled").length;
   $("#maintenance-value").textContent = offline;
   $("#summary").textContent = refreshFailed ? "Status unknown — displayed application details may be stale" :
+    refreshDeferred ? "Infrastructure operation in progress — showing last known application state" :
     `${healthy} of ${apps.length} applications healthy · ${offline} offline · ${paused} with updates paused`;
   const visible = visibleApps(apps);
   $("#empty").hidden = !apps.length || visible.length > 0;
-  const snapshot = JSON.stringify([visible, refreshFailed, busy]);
+  const snapshot = JSON.stringify([visible, refreshFailed, refreshDeferred, busy]);
   if (snapshot === renderedApps) return;
   renderedApps = snapshot;
   for (const name of selectedActions.keys()) {
@@ -106,7 +112,7 @@ function renderApps(apps) {
     card.append(link);
     const list = node("dl");
     detail(list, "Desired state", app.desired === "offline" ? "Offline · maintenance" : "Online");
-    detail(list, "Health", refreshFailed ? "unknown" : app.health);
+    detail(list, refreshDeferred ? "Last known health" : "Health", refreshFailed ? "unknown" : app.health);
     const profile = app.profile === "fullstack" ? "Fullstack" : app.profile === "frontend" ? "Frontend" : "Unknown";
     detail(list, "Type", `${profile} (${app.stateful ? "stateful" : "stateless"})`);
     detail(list, "Release", app.version || app.revision || "Not deployed");
@@ -224,18 +230,28 @@ async function refresh(showMessage = true) {
     const value = await api("session");
     account(value);
     if (session) {
-      const [applications, history] = await Promise.all([api("apps"), api("jobs")]);
+      const [applications, history] = await Promise.allSettled([api("apps"), api("jobs")]);
+      if (history.status === "rejected") throw history.reason;
+      renderJobs(history.value.jobs);
+      if (applications.status === "rejected") throw applications.reason;
       refreshFailed = false;
-      renderApps(applications.apps);
-      renderJobs(history.jobs);
+      refreshDeferred = false;
+      renderApps(applications.value.apps);
       $("#updated").textContent = `Last refreshed ${new Date().toLocaleString("sv-SE")}`;
       if (showMessage || $("#message").textContent === refreshFailureMessage) message("");
     }
-  } catch {
-    refreshFailed = true;
-    if (session) renderApps(latestApps);
-    message(refreshFailureMessage);
-    $("#updated").textContent = "State unknown — refresh failed";
+  } catch (error) {
+    if (error.code === "busy" && error.path === "apps" && session) {
+      refreshDeferred = true;
+      renderApps(latestApps);
+      $("#updated").textContent = "Application refresh deferred while an infrastructure operation runs; retrying automatically.";
+    } else {
+      refreshFailed = true;
+      refreshDeferred = false;
+      if (session) renderApps(latestApps);
+      message(refreshFailureMessage);
+      $("#updated").textContent = "State unknown — refresh failed";
+    }
   } finally { loading = false; $("#refresh").disabled = false; }
 }
 $("#refresh").addEventListener("click", () => refresh());

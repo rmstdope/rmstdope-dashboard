@@ -229,6 +229,73 @@ test("failed refresh makes overview health and application badges unknown", asyn
   await expect(page.locator("#message")).toContainText("may be stale");
 });
 
+for (const action of ["offline", "online"]) {
+  test(`${action} keeps last known app state and updates history while the executor is busy`, async ({ page }) => {
+    await page.clock.install();
+    let current = { ...app, health: "healthy", desired: action === "online" ? "offline" : "online" };
+    let status = "running";
+    const { submits, errors } = await setup(page, {
+      apps: () => [current, { ...app, name: "other", health: "healthy" }],
+      jobs: () => [{ ...job, action, status }],
+    });
+    const target = page.locator(".app-card").filter({ has: page.getByRole("heading", { name: "Example", exact: true }) });
+    const other = page.locator(".app-card").filter({ has: page.getByRole("heading", { name: "Other", exact: true }) });
+    await expect(other.locator(".status-healthy")).toBeVisible();
+    await target.getByRole("combobox").selectOption(action);
+    await target.getByRole("button", { name: "Preview operation" }).click();
+    const lockBusy = route => route.fulfill({
+      status: 409, json: { error: { code: "busy", message: "Another operation is in progress." } },
+    });
+    await page.route("**/api/apps", lockBusy);
+    await page.getByLabel("Type the application name to confirm").fill("example");
+    await page.getByRole("button", { name: "Confirm operation" }).click();
+    await expect(page.locator("#updated")).toContainText("refresh deferred");
+    await expect(page.locator("#message")).toContainText("accepted");
+    await expect(page.locator("#summary")).toContainText("last known application state");
+    await expect(other.locator(".status-healthy")).toBeVisible();
+    await expect(other.locator("dt").filter({ hasText: "Last known health" })).toBeVisible();
+    await expect(page.locator("#jobs")).toContainText("running");
+    status = "succeeded";
+    await page.clock.runFor(5100);
+    await expect(page.locator("#jobs")).toContainText("succeeded");
+    await expect(page.locator("#message")).not.toContainText("Refresh failed");
+
+    current = { ...current, desired: action === "offline" ? "offline" : "online" };
+    await page.unroute("**/api/apps", lockBusy);
+    await page.clock.runFor(5000);
+    await expect(page.locator("#updated")).toHaveText(/^Last refreshed /);
+    await expect(page.locator("#summary")).not.toContainText("last known");
+    await expect(target.locator(action === "offline" ? ".status-maintenance" : ".status-healthy")).toBeVisible();
+    await expect(other.locator(".status-healthy")).toBeVisible();
+    expect(submits).toHaveLength(1);
+    expect(errors).toEqual([]);
+  });
+}
+
+test("busy executor does not hide genuine refresh or history failures", async ({ page }) => {
+  await page.clock.install();
+  await setup(page, { apps: [{ ...app, health: "healthy" }] });
+  await expect(page.locator("#health-value")).toHaveText("1 / 1");
+  const unavailable = route => route.fulfill({
+    status: 503, json: { error: { code: "unavailable" } },
+  });
+  await page.route("**/api/apps", unavailable);
+  await page.clock.runFor(5100);
+  await expect(page.locator("#health-value")).toHaveText("Unknown");
+  await page.unroute("**/api/apps", unavailable);
+  await page.route("**/api/apps", route => route.fulfill({
+    status: 409, json: { error: { code: "busy" } },
+  }));
+  await page.clock.runFor(5000);
+  await expect(page.locator("#updated")).toContainText("refresh deferred");
+  await expect(page.locator("#health-value")).toHaveText("Unknown");
+  await expect(page.locator("#message")).toContainText("Refresh failed");
+  await page.route("**/api/jobs", unavailable);
+  await page.clock.runFor(5000);
+  await expect(page.locator("#updated")).toContainText("refresh failed");
+  await expect(page.locator("#message")).toContainText("Refresh failed");
+});
+
 test("scheduled refresh clears a recovered failure without clearing operation feedback", async ({ page }) => {
   await page.clock.install();
   await setup(page, { apps: [{ ...app, health: "healthy" }], previewFailure: true });
