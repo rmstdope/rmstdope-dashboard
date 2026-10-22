@@ -83,7 +83,7 @@ function renderApps(apps) {
     `${healthy} of ${apps.length} applications healthy · ${offline} offline · ${paused} with updates paused`;
   const visible = visibleApps(apps);
   $("#empty").hidden = !apps.length || visible.length > 0;
-  const snapshot = JSON.stringify([visible, refreshFailed]);
+  const snapshot = JSON.stringify([visible, refreshFailed, busy]);
   if (snapshot === renderedApps) return;
   renderedApps = snapshot;
   for (const name of selectedActions.keys()) {
@@ -156,7 +156,11 @@ function renderApps(apps) {
           $("#confirm-name").focus();
           message("");
         } catch (error) { message(error.message); }
-        finally { busy = false; button.disabled = app.recoveryRequired; }
+        finally {
+          busy = false;
+          button.disabled = app.recoveryRequired;
+          if (session) renderApps(latestApps);
+        }
       });
       card.append(form);
     }

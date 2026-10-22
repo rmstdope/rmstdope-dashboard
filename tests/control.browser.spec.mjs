@@ -39,6 +39,10 @@ async function setup(page, options = {}) {
     if (url.pathname === "/api/preview") {
       const request = route.request().postDataJSON();
       previews.push(request);
+      if (options.beforePreview) await options.beforePreview();
+      if (options.previewFailure) return route.fulfill({
+        status: 503, json: { error: { message: "Preview temporarily unavailable." } },
+      });
       return json({ preview: {
         id: "c".repeat(32), ...request, expiresAt: Math.floor(Date.now() / 1000) + 120,
         revision: app.revision, version: app.version,
@@ -224,3 +228,37 @@ test("failed refresh makes overview health and application badges unknown", asyn
   await expect(page.locator(".status-healthy")).toHaveCount(0);
   await expect(page.locator("#message")).toContainText("may be stale");
 });
+
+for (const previewFailure of [false, true]) {
+  test(`filtering during a ${previewFailure ? "failed" : "successful"} preview restores current operation buttons`, async ({ page }) => {
+    let release;
+    const waiting = new Promise(resolve => { release = resolve; });
+    const { previews, errors } = await setup(page, {
+      beforePreview: () => waiting, previewFailure,
+      apps: [app, { ...app, name: "recovery", recoveryRequired: true }],
+    });
+    const example = page.locator(".app-card").filter({ has: page.getByRole("heading", { name: "Example", exact: true }) });
+    const recovery = page.locator(".app-card").filter({ has: page.getByRole("heading", { name: "Recovery", exact: true }) });
+    await example.getByRole("combobox").selectOption("restart");
+    await example.getByRole("button", { name: "Preview operation" }).click();
+    await expect.poll(() => previews.length).toBe(1);
+    await page.getByRole("button", { name: "Frontend", exact: true }).click();
+    await page.getByRole("button", { name: "Fullstack", exact: true }).click();
+    await expect(example.getByRole("button")).toBeDisabled();
+    release();
+    if (previewFailure) {
+      await expect(page.locator("#message")).toContainText("Preview temporarily unavailable.");
+    } else {
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    }
+    await page.getByRole("button", { name: "Refresh", exact: true }).click();
+    await expect(example.getByRole("button")).toBeEnabled();
+    await expect(recovery.getByRole("button")).toBeDisabled();
+    await expect(example.getByRole("combobox")).toHaveValue("restart");
+    await example.getByRole("button").click();
+    await expect.poll(() => previews.length).toBe(2);
+    expect(previews.at(-1)).toEqual({ app: "example", action: "restart" });
+    expect(errors).toEqual([]);
+  });
+}
