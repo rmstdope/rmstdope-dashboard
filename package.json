@@ -3,7 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": {"test": "node --test tests/*.test.mjs", "test:browser": "playwright test"},
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:browser": "playwright test",
+    "test:control:browser": "playwright test --config playwright.control.config.js"
+  },
   "devDependencies": {"@playwright/test": "1.56.1"},
   "engines": {"node": ">=22"}
 }

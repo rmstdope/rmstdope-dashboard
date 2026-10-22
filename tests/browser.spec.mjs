@@ -39,6 +39,14 @@ test("stale and failed refresh never claim current healthy status", async ({ pag
   await expect(page.locator(".badge")).toHaveText("Unknown");
 });
 
+test("maintenance is intentional offline with unknown health", async ({ page }) => {
+  await page.route("**/status.json", route => route.fulfill({ json: feed([{ ...app, status: "maintenance" }]) }));
+  await page.goto("/");
+  await expect(page.getByText("Maintenance (intentionally offline)", { exact: true })).toBeVisible();
+  await expect(page.locator(".badge")).toHaveText("Unknown");
+  await expect(page.getByText("0 of 1 applications healthy")).toBeVisible();
+});
+
 test("unavailable first feed and malformed links render no unsafe launch link", async ({ page }) => {
   await page.route("**/status.json", route => route.fulfill({ status: 404, body: "missing" }));
   await page.goto("/");

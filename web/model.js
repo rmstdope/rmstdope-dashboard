@@ -1,7 +1,7 @@
 const namePattern = /^[a-z][a-z0-9-]{0,39}$/;
 const states = {
   health: ["healthy", "unhealthy", "unknown"],
-  status: ["running", "degraded", "not-deployed", "recovery-required", "unknown"],
+  status: ["running", "degraded", "not-deployed", "recovery-required", "maintenance", "unknown"],
   automation: ["enabled", "paused", "manual"],
 };
 
@@ -43,7 +43,7 @@ export function isStale(snapshot, now = Date.now()) {
 }
 
 export function displayHealth(app, stale) {
-  return stale ? "unknown" : app.health;
+  return stale || app.status === "maintenance" ? "unknown" : app.health;
 }
 
 export function applicationTypeLabel(app) {

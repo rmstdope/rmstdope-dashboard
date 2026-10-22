@@ -1,0 +1,4 @@
+*
+!Dockerfile.control
+!control/
+!control/**

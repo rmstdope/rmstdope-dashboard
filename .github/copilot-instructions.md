@@ -13,3 +13,8 @@ Show stale/unknown data explicitly; missing data must not look healthy.
 Use immutable published container images, focused tests and reviewed PRs.
 Do not merge implementation PRs or deploy without explicit authorization.
 Keep browser code accessible, responsive and safe for untrusted snapshot values.
+
+The authorized control application is a separate build and HTTPS origin in
+`control/`; follow its documented OAuth/session/socket boundaries. Its API may
+connect only to the dedicated allowlisted executor socket, never Docker or raw
+deployment state. Keep the public Caddy image and snapshot UI read-only.

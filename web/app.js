@@ -7,7 +7,7 @@ const labels = {
   healthy: "Healthy", unhealthy: "Unhealthy", unknown: "Unknown",
   running: "Running", degraded: "Degraded", "not-deployed": "Not deployed",
   "recovery-required": "Recovery required", enabled: "Automatic",
-  paused: "Paused", manual: "Manual",
+  paused: "Paused", manual: "Manual", maintenance: "Maintenance (intentionally offline)",
 };
 const apps = document.querySelector("#apps");
 const summary = document.querySelector("#summary");
@@ -36,7 +36,7 @@ function render() {
     return;
   }
   const stale = failed || isStale(snapshot);
-  const healthy = snapshot.apps.filter(app => app.health === "healthy").length;
+  const healthy = snapshot.apps.filter(app => displayHealth(app, stale) === "healthy").length;
   summary.textContent = stale ? "Status unknown - data is not current" :
     `${healthy} of ${snapshot.apps.length} applications healthy`;
   updated.textContent = `Last collected ${new Date(snapshot.generatedAt).toLocaleString("sv-SE")}`;
@@ -62,8 +62,8 @@ function render() {
     detail(details, "Status", stale ? "Unknown (stale)" : labels[app.status]);
     if (app.version) detail(details, "Version", app.version);
     detail(details, "Revision", app.revision || "Not available");
-    detail(details, "Public HTTPS", stale ? "Unknown" : labels[app.publicHealth]);
-    detail(details, "Container", stale ? "Unknown" : labels[app.containerHealth]);
+    detail(details, "Public HTTPS", stale || app.status === "maintenance" ? "Unknown" : labels[app.publicHealth]);
+    detail(details, "Container", stale || app.status === "maintenance" ? "Unknown" : labels[app.containerHealth]);
     detail(details, "Deployment", app.deployedAt ? new Date(app.deployedAt).toLocaleString("sv-SE") : "Not available");
     const updates = app.automation === "enabled" && app.updateSource ?
       `Automatic (${app.updateSource})` : labels[app.automation];

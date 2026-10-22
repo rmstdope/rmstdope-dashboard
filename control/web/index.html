@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>rmstdope control</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <header>
+    <div><h1>Application control</h1><p>Authorized operations · <a href="https://dashboard.rmstdope.eu" rel="noreferrer">Public status dashboard</a></p></div>
+    <nav aria-label="Account"><span id="account">Checking sign-in…</span> <a id="login" href="/auth/login" hidden>Sign in with GitHub</a><button id="logout" hidden>Sign out</button></nav>
+  </header>
+  <main>
+    <p class="notice">Manual offline, online, update, restart and rollback operations leave automatic updates paused. Database administration and raw logs are not available here.</p>
+    <p id="message" role="status" aria-live="polite"></p>
+    <section id="control" hidden>
+      <div class="section-heading"><h2>Registered applications</h2><button id="refresh">Refresh</button></div>
+      <p id="updated"></p>
+      <div id="apps" class="apps"></div>
+      <h2>Operation history</h2>
+      <p>Jobs run serially on the host. Closing this page does not cancel an operation. History refreshes every 5 seconds.</p>
+      <ol id="jobs" aria-label="Operation history"></ol>
+    </section>
+  </main>
+  <dialog id="confirmation" aria-labelledby="confirm-title">
+    <form id="confirm-form">
+      <h2 id="confirm-title">Confirm operation</h2>
+      <p id="effects" class="warning"></p>
+      <p id="target"></p>
+      <p id="expiry"></p>
+      <label for="confirm-name">Type the application name to confirm</label>
+      <input id="confirm-name" autocomplete="off" required maxlength="40">
+      <p id="confirm-error" role="alert"></p>
+      <div class="actions"><button id="confirm" type="submit">Confirm operation</button><button id="cancel" type="button">Cancel</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

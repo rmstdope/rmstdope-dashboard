@@ -31,9 +31,9 @@ jobs:
           build-args: REVISION=${{ github.sha }}
       - name: Start production image
         run: |
-          mkdir -p /tmp/dashboard-status
+          mkdir -p "$GITHUB_WORKSPACE/.ci-dashboard-status"
           docker run -d --name dashboard-test -p 127.0.0.1:18080:8080 \
-            --mount type=bind,src=/tmp/dashboard-status,dst=/status,readonly \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/.ci-dashboard-status,dst=/status,readonly" \
             ghcr.io/rmstdope/rmstdope-dashboard:${{ github.sha }}
           for attempt in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:18080/healthz; then exit 0; fi
@@ -45,11 +45,11 @@ jobs:
       - name: Verify atomic snapshot publication through read-only directory mount
         run: |
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:18080/status.json)" = 404
-          printf '{"schemaVersion":1,"apps":[]}\n' > /tmp/dashboard-status/candidate
-          mv /tmp/dashboard-status/candidate /tmp/dashboard-status/status.json
+          printf '{"schemaVersion":1,"apps":[]}\n' > .ci-dashboard-status/candidate
+          mv .ci-dashboard-status/candidate .ci-dashboard-status/status.json
           curl -fsS http://127.0.0.1:18080/status.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["schemaVersion"] == 1'
-          printf '{"schemaVersion":2,"apps":[]}\n' > /tmp/dashboard-status/candidate
-          mv /tmp/dashboard-status/candidate /tmp/dashboard-status/status.json
+          printf '{"schemaVersion":2,"apps":[]}\n' > .ci-dashboard-status/candidate
+          mv .ci-dashboard-status/candidate .ci-dashboard-status/status.json
           curl -fsS http://127.0.0.1:18080/status.json | python3 -c 'import json,sys; assert json.load(sys.stdin)["schemaVersion"] == 2'
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -86,4 +86,90 @@ jobs:
         with:
           name: deployment-manifest
           path: deployment.json
+          retention-days: 90
+
+  control:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci && npm test
+      - run: npx playwright install --with-deps chromium
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.control
+          load: true
+          platforms: linux/amd64
+          tags: ghcr.io/rmstdope/rmstdope-control:${{ github.sha }}
+          build-args: REVISION=${{ github.sha }}
+      - name: Start isolated non-root production control image
+        env:
+          REVISION: ${{ github.sha }}
+        run: |
+          mkdir -p .ci-control/sessions
+          sudo chown 10001:10001 .ci-control/sessions
+          sudo chmod 700 .ci-control/sessions
+          image="ghcr.io/rmstdope/rmstdope-control:$REVISION"
+          test "$(docker image inspect "$image" --format '{{.Config.User}}')" = 10001:10001
+          docker run -d --name control-test -p 127.0.0.1:18081:8081 \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+            --pids-limit 64 --memory 256m \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/.ci-control/sessions,dst=/sessions" \
+            -e CONTROL_ORIGIN=https://control.rmstdope.eu \
+            -e ADMIN_GITHUB_IDS=123456 -e GITHUB_CLIENT_ID=test-only \
+            -e GITHUB_CLIENT_SECRET=test-only -e SESSION_STORE_DIR=/sessions \
+            -e EXECUTOR_SOCKET=/run/executor/executor.sock "$image"
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:18081/healthz; then break; fi
+            sleep 1
+          done
+          curl -fsS -H 'Host: control.rmstdope.eu' http://127.0.0.1:18081/release.json \
+            | REVISION="$REVISION" python3 -c 'import json,os,sys; assert json.load(sys.stdin)["revision"] == os.environ["REVISION"]'
+          docker exec control-test node -e 'if(process.getuid()!==10001||process.getgid()!==10001)process.exit(1)'
+      - run: npm run test:control:browser
+        env:
+          CONTROL_TEST_URL: http://127.0.0.1:18081
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: control-browser-failures
+          path: test-results/
+      - name: Stop test container
+        if: always()
+        run: docker rm -f control-test || true
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tested control image and separate immutable manifest
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          REVISION: ${{ github.sha }}
+        run: |
+          image="ghcr.io/rmstdope/rmstdope-control:$REVISION"
+          docker push "$image"
+          IMAGE="$image" python3 - <<'PY'
+          import json, os, subprocess
+          details = json.loads(subprocess.check_output(
+              ["docker", "image", "inspect", os.environ["IMAGE"]]))[0]
+          digest = next(ref for ref in details["RepoDigests"]
+                        if ref.startswith("ghcr.io/rmstdope/rmstdope-control@sha256:"))
+          with open("control-deployment.json", "w") as stream:
+              json.dump({"revision": os.environ["REVISION"], "images": {"web": digest}}, stream)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: control-deployment-manifest
+          path: control-deployment.json
           retention-days: 90

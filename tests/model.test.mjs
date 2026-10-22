@@ -30,6 +30,12 @@ test("stale or future snapshots never retain healthy presentation", () => {
   assert.equal(displayHealth(app, false), "healthy");
 });
 
+test("intentional maintenance is accepted and never presented as healthy", () => {
+  const maintenance = { ...app, status: "maintenance" };
+  validateSnapshot({ ...snapshot, apps: [maintenance] });
+  assert.equal(displayHealth(maintenance, false), "unknown");
+});
+
 test("accepts all deployed status cases and an empty directory", () => {
   for (const status of ["running", "degraded", "not-deployed", "recovery-required", "unknown"]) {
     validateSnapshot({ ...snapshot, apps: [{ ...app, status }] });

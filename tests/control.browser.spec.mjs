@@ -1,0 +1,139 @@
+import { test, expect } from "@playwright/test";
+
+const upstream = process.env.CONTROL_TEST_URL || "http://127.0.0.1:18081";
+const app = {
+  name: "example", url: "https://example.rmstdope.eu", profile: "fullstack", stateful: true,
+  desired: "online", health: "unknown", revision: "a".repeat(40), version: "v1.2.3",
+  automation: "paused", recoveryRequired: false, protected: false,
+};
+const signedIn = { authenticated: true, actor: "123456", csrf: "test-csrf", recent: true };
+const job = {
+  id: "b".repeat(32), app: "example", action: "rollback", status: "queued",
+  createdAt: 1800000000, updatedAt: 1800000000, message: "Waiting for the executor.",
+};
+async function setup(page, options = {}) {
+  const submits = [], errors = [];
+  let authenticated = options.authenticated !== false;
+  let submitCount = 0;
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("https://control.rmstdope.eu/**", async route => {
+    const url = new URL(route.request().url());
+    if (!url.pathname.startsWith("/api/")) {
+      const response = await route.fetch({
+        url: `${upstream}${url.pathname}`, headers: { Host: "control.rmstdope.eu" },
+      });
+      return route.fulfill({ response });
+    }
+    const json = value => route.fulfill({ json: value });
+    if (url.pathname === "/api/session") return json(authenticated ? signedIn : { authenticated: false });
+    if (url.pathname === "/api/logout") { authenticated = false; return json({ ok: true }); }
+    if (url.pathname === "/api/apps") return json({ apps: options.apps || [app, {
+      ...app, name: "control", protected: true,
+    }] });
+    if (url.pathname === "/api/jobs") return json({ jobs: options.jobs ? options.jobs() : [] });
+    if (url.pathname === "/api/preview") {
+      const request = route.request().postDataJSON();
+      return json({ preview: {
+        id: "c".repeat(32), ...request, expiresAt: Math.floor(Date.now() / 1000) + 120,
+        revision: app.revision, version: app.version,
+        warning: "The database is NOT rolled back. Automatic updates remain paused.",
+      } });
+    }
+    if (url.pathname === "/api/submit") {
+      submits.push(route.request().postDataJSON());
+      submitCount++;
+      if (options.failFirstSubmit && submitCount === 1) return route.fulfill({
+        status: 503, json: { error: { message: "Executor temporarily unavailable." } },
+      });
+      return json({ job });
+    }
+    return route.fulfill({ status: 404, json: {} });
+  });
+  await page.goto("/");
+  return { submits, errors };
+}
+
+test("signed-out control has explicit GitHub sign-in and no operation controls", async ({ page }) => {
+  const { errors } = await setup(page, { authenticated: false });
+  await expect(page.getByText("Not signed in", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toHaveAttribute("href", "/auth/login");
+  await expect(page.getByRole("button", { name: "Preview operation" })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("typed confirmation, database warning, protected self apps and sign out", async ({ page }) => {
+  const { submits, errors } = await setup(page);
+  await expect(page.getByText("GitHub ID 123456")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preview operation" })).toHaveCount(1);
+  await page.getByRole("combobox", { name: "Operation for example" }).selectOption("rollback");
+  await page.getByRole("button", { name: "Preview operation" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator("#effects")).toContainText("database is NOT rolled back");
+  await page.getByLabel("Type the application name to confirm").fill("wrong");
+  await page.getByRole("button", { name: "Confirm operation" }).click();
+  await expect(page.getByText("Application name does not match.")).toBeVisible();
+  expect(submits).toHaveLength(0);
+  await page.getByLabel("Type the application name to confirm").fill("example");
+  await page.getByRole("button", { name: "Confirm operation" }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(page.getByRole("status")).toContainText("accepted");
+  expect(submits).toHaveLength(1);
+  expect(Object.keys(submits[0]).sort()).toEqual(["idempotencyKey", "previewId"]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByText("Not signed in", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Preview operation" })).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+test("submission retry retains idempotency key and preview without another operation", async ({ page }) => {
+  const { submits } = await setup(page, { failFirstSubmit: true });
+  await page.getByRole("button", { name: "Preview operation" }).click();
+  await page.getByLabel("Type the application name to confirm").fill("example");
+  await page.getByRole("button", { name: "Confirm operation" }).click();
+  await expect(page.locator("#confirm-error")).toContainText("Retrying uses the same confirmation key");
+  await page.getByRole("button", { name: "Confirm operation" }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  expect(submits).toHaveLength(2);
+  expect(submits[0]).toEqual(submits[1]);
+});
+
+test("offline blocks unsafe actions and history shows queued then completed progress", async ({ page }) => {
+  let done = false;
+  await setup(page, {
+    apps: [{ ...app, desired: "offline" }],
+    jobs: () => [{ ...job, status: done ? "succeeded" : "queued",
+      message: done ? "Operation completed." : "Waiting for the executor." }],
+  });
+  await expect(page.getByText("Offline · maintenance", { exact: true })).toBeVisible();
+  for (const action of ["resume", "update", "restart", "rollback"]) {
+    await expect(page.locator(`option[value="${action}"]`)).toBeDisabled();
+  }
+  await expect(page.locator("#jobs")).toContainText("queued");
+  done = true;
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.locator("#jobs")).toContainText("succeeded");
+  await expect(page.locator("#updated")).toHaveText(/^Last refreshed \d{4}-\d{2}-\d{2} /);
+});
+
+test("untrusted messages and app data remain text, not markup", async ({ page }) => {
+  await setup(page, {
+    apps: [{ ...app, profile: "<img src=x onerror=alert(1)>" }],
+    jobs: () => [{ ...job, message: "<img src=x onerror=alert(1)>" }],
+  });
+  await expect(page.locator("#jobs")).toContainText("<img src=x onerror=alert(1)>");
+  await expect(page.locator("img")).toHaveCount(0);
+});
+
+test("actual server is unprivileged surface with safe headers and no session/state files", async ({ request }) => {
+  const health = await request.get(`${upstream}/healthz`);
+  expect(health.status()).toBe(200);
+  const headers = { Host: "control.rmstdope.eu" };
+  const html = await request.get(`${upstream}/`, { headers });
+  expect(html.status()).toBe(200);
+  expect(html.headers()["content-security-policy"]).toContain("default-src 'none'");
+  expect(html.headers()["cache-control"]).toBe("no-store");
+  for (const route of ["/.git/config", "/sessions.json", "/server.mjs", "/api/apps"]) {
+    expect((await request.get(`${upstream}${route}`, { headers })).status()).toBe(route === "/api/apps" ? 401 : 404);
+  }
+});

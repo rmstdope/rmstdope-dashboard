@@ -1,3 +1,9 @@
 node_modules/
 playwright-report/
 test-results/
+.playwright/
+.browser-download/
+.ctl-test-*/
+.control-browser-*/
+.ci-control/
+.ci-dashboard-status/
