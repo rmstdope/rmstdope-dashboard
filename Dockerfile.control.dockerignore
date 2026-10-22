@@ -2,3 +2,7 @@
 !Dockerfile.control
 !control/
 !control/**
+!web/
+!web/precision.css
+!web/theme.js
+!web/collection.js

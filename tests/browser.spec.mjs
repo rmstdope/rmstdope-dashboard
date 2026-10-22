@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { verifyTheme } from "./theme-checks.mjs";
 
 const app = {
   name: "atlantis-hud", url: "https://atlantis-hud.rmstdope.eu", health: "healthy",
@@ -33,6 +34,7 @@ test("stale and failed refresh never claim current healthy status", async ({ pag
   await page.goto("/");
   await expect(page.getByText("Status unknown - data is not current")).toBeVisible();
   await expect(page.locator(".badge")).toHaveText("Unknown");
+  await expect(page.locator("#health-value")).toHaveText("Unknown");
   await page.route("**/status.json", route => route.fulfill({ status: 503, body: "Unavailable" }));
   await page.getByRole("button", { name: "Refresh status" }).click();
   await expect(page.getByText("Status refresh failed.", { exact: false })).toBeVisible();
@@ -118,7 +120,33 @@ test("shows frontend/fullstack and persistence with an unknown fallback for old 
     const row = cards.nth(index).locator("dl > div").filter({
       has: page.locator("dt").filter({ hasText: /^Type$/ }),
     });
+
     await expect(row.locator("dd")).toHaveText(label);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("Precision themes follow system changes and save an explicit preference", async ({ page }) => {
+  await page.route("**/status.json", route => route.fulfill({ json: feed() }));
+  await page.goto("/");
+  await verifyTheme(page);
+});
+
+test("filters and search use real classifications without changing platform counts", async ({ page }) => {
+  await page.route("**/status.json", route => route.fulfill({ json: feed([
+    { ...app, applicationType: "frontend", stateful: false },
+    { ...app, name: "dominos", url: "https://dominos.rmstdope.eu", applicationType: "fullstack", stateful: true },
+  ]) }));
+  await page.goto("/");
+  await expect(page.locator("#health-value")).toHaveText("2 / 2");
+  await page.getByRole("button", { name: "Fullstack", exact: true }).click();
+  await expect(page.locator(".card")).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Dominos", exact: true })).toBeVisible();
+  await expect(page.locator("#health-value")).toHaveText("2 / 2");
+  await page.getByRole("searchbox", { name: "Find an application" }).fill("atlantis");
+  await expect(page.locator("#empty")).toBeVisible();
+  await page.getByRole("button", { name: "All apps", exact: true }).click();
+  await expect(page.locator(".card")).toHaveCount(1);
+  await page.getByRole("searchbox", { name: "Find an application" }).clear();
+  await expect(page.locator(".card")).toHaveCount(2);
 });

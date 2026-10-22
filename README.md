@@ -10,6 +10,19 @@ privileged mounts to the public dashboard.
 
 ## Behavior and data
 
+Both applications use the **Precision** interface: a restrained graphite/mint
+palette, desktop workspace navigation, responsive application cards, search and
+Frontend/Fullstack filters. Summary values come from actual application data;
+filtering the cards does not change platform-wide counts. The public dashboard
+does not fabricate uptime charts or expose the private control operation history.
+
+The theme initially follows the operating system, including live system-theme
+changes. The theme button saves an explicit light/dark preference in browser
+local storage. Preferences are local to each origin: signing in and visiting the
+public dashboard do not share cookies, sessions or preference storage.
+`web/precision.css`, `web/theme.js` and `web/collection.js` are shared by both
+builds; no frontend framework or runtime dependency is required.
+
 Static HTML/CSS/JavaScript, no runtime frontend dependencies. App cards display
 public HTTPS/container health, status, version or short revision, deployment
 time, automation enabled/paused/manual and recovery-required indication. Launch

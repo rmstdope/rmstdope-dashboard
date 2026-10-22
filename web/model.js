@@ -54,9 +54,4 @@ export function applicationTypeLabel(app) {
   return type === "Unknown" && app.stateful == null ? "Unknown" : `${type} (${persistence})`;
 }
 
-export function title(name) {
-  return name === "atlantis-hud" ? "Atlantis HUD" :
-    name === "retroquest" ? "RetroQuest" :
-    name === "dashboard" ? "Dashboard" :
-    name.split("-").filter(Boolean).map(word => word[0].toUpperCase() + word.slice(1)).join(" ");
-}
+export { title } from "./collection.js";

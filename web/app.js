@@ -1,4 +1,5 @@
 import { validateSnapshot, isStale, displayHealth, applicationTypeLabel, title } from "./model.js";
+import { collection } from "./collection.js";
 
 let snapshot = null;
 let failed = false;
@@ -14,6 +15,7 @@ const summary = document.querySelector("#summary");
 const updated = document.querySelector("#updated");
 const notice = document.querySelector("#notice");
 const refresh = document.querySelector("#refresh");
+const visibleApps = collection(render, app => app.applicationType);
 
 function element(tag, className, text) {
   const node = document.createElement(tag);
@@ -37,6 +39,15 @@ function render() {
   }
   const stale = failed || isStale(snapshot);
   const healthy = snapshot.apps.filter(app => displayHealth(app, stale) === "healthy").length;
+  document.querySelector("#health-value").textContent = stale ? "Unknown" : `${healthy} / ${snapshot.apps.length}`;
+  document.querySelector("#health-description").textContent = stale ? "Current health is not available" : "Applications currently healthy";
+  const automatic = snapshot.apps.filter(app => app.automation === "enabled").length;
+  document.querySelector("#automation-value").textContent = String(automatic);
+  document.querySelector("#automation-description").textContent = stale ? "Automatic update policies (last known)" : "Applications with automatic updates";
+  const latest = snapshot.apps.filter(app => app.deployedAt).sort((a, b) => Date.parse(b.deployedAt) - Date.parse(a.deployedAt))[0];
+  document.querySelector("#deployment-value").textContent = latest ? title(latest.name) : "Not available";
+  document.querySelector("#deployment-description").textContent = latest
+    ? `Recorded ${new Date(latest.deployedAt).toLocaleString("sv-SE")}${stale ? " (last known)" : ""}` : "No recorded deployment timestamp";
   summary.textContent = stale ? "Status unknown - data is not current" :
     `${healthy} of ${snapshot.apps.length} applications healthy`;
   updated.textContent = `Last collected ${new Date(snapshot.generatedAt).toLocaleString("sv-SE")}`;
@@ -48,12 +59,16 @@ function render() {
   if (!snapshot.apps.length) {
     apps.append(element("p", "notice", "No applications are registered."));
   }
-  for (const app of snapshot.apps) {
+  const visible = visibleApps(snapshot.apps);
+  document.querySelector("#empty").hidden = !snapshot.apps.length || visible.length > 0;
+  for (const app of visible) {
     const health = displayHealth(app, stale);
     const card = element("article", "card");
     const top = element("div", "card-top");
     const badge = element("span", `badge ${health}`, labels[health]);
-    top.append(element("h2", "", title(app.name)), badge);
+    const icon = element("span", "app-icon", title(app.name).slice(0, 1));
+    icon.setAttribute("aria-hidden", "true");
+    top.append(icon, element("h2", "", title(app.name)), badge);
     card.append(top,
       element("p", "hostname", new URL(app.url).hostname));
     if (app.recoveryRequired) card.append(element("p", "warning", "Recovery required"));
@@ -68,7 +83,7 @@ function render() {
     const updates = app.automation === "enabled" && app.updateSource ?
       `Automatic (${app.updateSource})` : labels[app.automation];
     detail(details, "Updates", `${updates}${stale ? " (last known)" : ""}`);
-    const link = element("a", "launch", "Launch application");
+    const link = element("a", "launch button", "Launch application ↗");
     link.href = app.url;
     link.target = "_blank";
     link.rel = "noopener noreferrer";
