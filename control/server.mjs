@@ -85,6 +85,8 @@ export function createControlServer(config, dependencies = {}) {
   const store = dependencies.store || new Store(config.storeDir, now);
   const executor = dependencies.execute || (request => execute(config.socket, request));
   const oauth = dependencies.authenticate || ((code, verifier) => authenticate(config, code, verifier));
+  const reportOAuthFailure = dependencies.reportOAuthFailure ||
+    (reason => console.warn(`OAuth callback rejected: ${reason}`));
   const staticAssets = new Map([...assets].map(([route, [name, type]]) => [
     route, [fs.readFileSync(new URL(`./web/${name}`, import.meta.url)), type],
   ]));
@@ -161,11 +163,16 @@ export function createControlServer(config, dependencies = {}) {
       }
       if (req.method === "GET" && url.pathname === "/auth/callback") {
         const state = url.searchParams.get("state"), code = url.searchParams.get("code");
-        if (!state || !/^[a-zA-Z0-9_-]{43}$/.test(state) || !jar[OAUTH] ||
-            !/^[a-zA-Z0-9_-]{43}$/.test(jar[OAUTH]) ||
-            url.searchParams.getAll("state").length !== 1 || url.searchParams.getAll("code").length !== 1 ||
-            !code || !/^[a-zA-Z0-9_.-]{1,256}$/.test(code) ||
-            [...url.searchParams.keys()].some(key => !["state", "code"].includes(key))) {
+        const invalid = Object.entries({
+          state_format: !state || !/^[a-zA-Z0-9_-]{43}$/.test(state),
+          binding_cookie: !jar[OAUTH] || !/^[a-zA-Z0-9_-]{43}$/.test(jar[OAUTH]),
+          parameter_count: url.searchParams.getAll("state").length !== 1 ||
+            url.searchParams.getAll("code").length !== 1,
+          code_format: !code || !/^[a-zA-Z0-9_.-]{1,256}$/.test(code),
+          unexpected_parameters: [...url.searchParams.keys()].some(key => !["state", "code"].includes(key)),
+        }).filter(([, rejected]) => rejected).map(([reason]) => reason);
+        if (invalid.length) {
+          reportOAuthFailure(invalid.join(","));
           fail(400, "oauth_failed", "Sign-in failed. Start a new sign-in.");
         }
         const attempt = store.finishOAuth(state, jar[OAUTH]);

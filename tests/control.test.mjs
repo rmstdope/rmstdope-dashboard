@@ -54,6 +54,7 @@ async function fixture(t, overrides = {}) {
   const server = createControlServer(config, {
     store, now, execute: executor,
     authenticate: overrides.authenticate || (async () => actor),
+    reportOAuthFailure: overrides.reportOAuthFailure || (() => {}),
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {
@@ -89,6 +90,16 @@ async function fixture(t, overrides = {}) {
   }
   return { request, store, id, session, calls, config, now, advance: ms => { time += ms; } };
 }
+
+test("callback diagnostics contain fixed categories, never codes or cookie values", async t => {
+  const reasons = [];
+  const f = await fixture(t, { reportOAuthFailure: reason => reasons.push(reason) });
+  const response = await f.request("/auth/callback?state=private-state&code=private-code&extra=private-value",
+    { auth: false, headers: { Cookie: "__Host-control-oauth=private-cookie" } });
+  assert.equal(response.status, 400);
+  assert.deepEqual(reasons, ["state_format,binding_cookie,unexpected_parameters"]);
+  assert.equal(reasons.join().includes("private"), false);
+});
 
 test("configuration fails closed without explicit admins, secrets and HTTPS canonical origin", () => {
   const env = {
