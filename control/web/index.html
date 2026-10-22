@@ -9,32 +9,45 @@
 </head>
 <body>
   <header>
-    <div><h1>Application control</h1><p>Authorized operations · <a href="https://dashboard.rmstdope.eu" rel="noreferrer">Public status dashboard</a></p></div>
-    <nav aria-label="Account"><span id="account">Checking sign-in…</span> <a id="login" href="/auth/login" hidden>Sign in with GitHub</a><button id="logout" hidden>Sign out</button></nav>
+    <a class="brand" href="/">rmstdope<span>.eu</span></a>
+    <span class="eyebrow">APPLICATION CONTROL</span>
+    <nav aria-label="Account">
+      <a class="button button-secondary" href="https://dashboard.rmstdope.eu" rel="noreferrer">Public dashboard</a>
+      <a id="login" class="button button-primary" href="/auth/login" hidden>Sign in with GitHub</a>
+      <button id="logout" class="button button-secondary" hidden>Sign out</button>
+    </nav>
   </header>
   <main>
-    <p class="notice">Manual offline, online, update, restart and rollback operations leave automatic updates paused. Database administration and raw logs are not available here.</p>
+    <div class="session-bar"><span class="session-dot" aria-hidden="true"></span><span id="account">Checking sign-in…</span><span class="session-label">GitHub authorization · Restricted host access</span></div>
+    <section id="welcome" class="welcome" hidden>
+      <h1>Application control</h1>
+      <p>Sign in with your authorized GitHub account to manage availability, review updates and track operations. Every change starts with a preview.</p>
+    </section>
     <p id="message" role="status" aria-live="polite"></p>
     <section id="control" hidden>
-      <div class="section-heading"><h2>Registered applications</h2><button id="refresh">Refresh</button></div>
-      <p id="updated"></p>
+      <div class="overview">
+        <div><h1>Registered applications</h1><p id="summary"></p><p id="updated" class="muted"></p></div>
+        <button id="refresh" class="button button-secondary">Refresh</button>
+      </div>
+      <p class="notice">Manual availability and image operations leave automatic updates paused. Bringing an application online does not resume updates. Database administration and raw logs remain outside this panel.</p>
       <div id="apps" class="apps"></div>
-      <h2>Operation history</h2>
-      <p>Jobs run serially on the host. Closing this page does not cancel an operation. History refreshes every 5 seconds.</p>
+      <div class="section-heading history-heading"><h2>Operation history</h2><span class="badge">Live · 5s refresh</span></div>
+      <p class="muted">Jobs run one at a time. Closing this page does not cancel an accepted operation.</p>
       <ol id="jobs" aria-label="Operation history"></ol>
     </section>
   </main>
   <dialog id="confirmation" aria-labelledby="confirm-title">
     <form id="confirm-form">
-      <h2 id="confirm-title">Confirm operation</h2>
+      <p class="eyebrow">Review before applying</p><h2 id="confirm-title">Confirm operation</h2>
       <p id="effects" class="warning"></p>
       <p id="target"></p>
       <p id="expiry"></p>
       <label for="confirm-name">Type the application name to confirm</label>
       <input id="confirm-name" autocomplete="off" required maxlength="40">
       <p id="confirm-error" role="alert"></p>
-      <div class="actions"><button id="confirm" type="submit">Confirm operation</button><button id="cancel" type="button">Cancel</button></div>
+      <div class="actions"><button id="cancel" class="button button-secondary" type="button">Cancel</button><button id="confirm" class="button button-primary" type="submit">Confirm operation</button></div>
     </form>
   </dialog>
+  <footer>rmstdope control · Confirmed changes. Durable operations. Independent SSH recovery.</footer>
 </body>
 </html>
