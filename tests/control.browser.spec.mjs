@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { verifyTheme } from "./theme-checks.mjs";
 
 const upstream = process.env.CONTROL_TEST_URL || "http://127.0.0.1:18081";
 const app = {
@@ -189,4 +190,37 @@ test("actual server is unprivileged surface with safe headers and no session/sta
   for (const route of ["/.git/config", "/sessions.json", "/server.mjs", "/api/apps"]) {
     expect((await request.get(`${upstream}${route}`, { headers })).status()).toBe(route === "/api/apps" ? 401 : 404);
   }
+});
+
+test("control uses the shared system-aware, persisted light and dark themes", async ({ page }) => {
+  await setup(page);
+  await verifyTheme(page);
+});
+
+test("filtering and searching preserve chosen actions without filtering overview counts", async ({ page }) => {
+  const { previews } = await setup(page);
+  const select = page.getByRole("combobox", { name: "Operation for example" });
+  await expect(page.locator("#automation-value")).toHaveText("0");
+  await select.selectOption("restart");
+  await page.getByRole("button", { name: "Frontend", exact: true }).click();
+  await expect(page.locator("#empty")).toBeVisible();
+  await page.getByRole("button", { name: "Fullstack", exact: true }).click();
+  await expect(select).toHaveValue("restart");
+  await page.getByRole("searchbox", { name: "Find an application" }).fill("missing");
+  await expect(page.locator("#empty")).toBeVisible();
+  await page.getByRole("searchbox", { name: "Find an application" }).clear();
+  await expect(select).toHaveValue("restart");
+  await page.getByRole("button", { name: "Preview operation" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(previews.at(-1)).toEqual({ app: "example", action: "restart" });
+});
+
+test("failed refresh makes overview health and application badges unknown", async ({ page }) => {
+  await setup(page, { apps: [{ ...app, health: "healthy" }] });
+  await expect(page.locator("#health-value")).toHaveText("1 / 1");
+  await page.route("**/api/apps", route => route.fulfill({ status: 503, json: {} }));
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.locator("#health-value")).toHaveText("Unknown");
+  await expect(page.locator(".status-healthy")).toHaveCount(0);
+  await expect(page.locator("#message")).toContainText("may be stale");
 });

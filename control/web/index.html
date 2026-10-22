@@ -3,51 +3,56 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>rmstdope control</title>
+  <title>rmstdope / control</title>
+  <script src="/theme.js"></script>
+  <link rel="stylesheet" href="/precision.css">
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body>
-  <header>
-    <a class="brand" href="/">rmstdope<span>.eu</span></a>
-    <span class="eyebrow">APPLICATION CONTROL</span>
-    <nav aria-label="Account">
-      <a class="button button-secondary" href="https://dashboard.rmstdope.eu" rel="noreferrer">Public dashboard</a>
-      <a id="login" class="button button-primary" href="/auth/login" hidden>Sign in with GitHub</a>
-      <button id="logout" class="button button-secondary" hidden>Sign out</button>
-    </nav>
-  </header>
-  <main>
-    <div class="session-bar"><span class="session-dot" aria-hidden="true"></span><span id="account">Checking sign-in…</span><span class="session-label">GitHub authorization · Restricted host access</span></div>
-    <section id="welcome" class="welcome" hidden>
-      <h1>Application control</h1>
-      <p>Sign in with your authorized GitHub account to manage availability, review updates and track operations. Every change starts with a preview.</p>
-    </section>
-    <p id="message" role="status" aria-live="polite"></p>
-    <section id="control" hidden>
-      <div class="overview">
-        <div><h1>Registered applications</h1><p id="summary"></p><p id="updated" class="muted"></p></div>
-        <button id="refresh" class="button button-secondary">Refresh</button>
-      </div>
-      <p class="notice">Manual availability and image operations leave automatic updates paused. Bringing an application online does not resume updates. Database administration and raw logs remain outside this panel.</p>
-      <div id="apps" class="apps"></div>
-      <div class="section-heading history-heading"><h2>Operation history</h2><span class="badge">Live · 5s refresh</span></div>
-      <p class="muted">Jobs run one at a time. Closing this page does not cancel an accepted operation.</p>
-      <ol id="jobs" aria-label="Operation history"></ol>
-    </section>
-  </main>
+  <div class="workspace">
+    <aside class="sidebar">
+      <a class="brand" href="/"><span class="brand-symbol" aria-hidden="true">r</span>rmstdope<span class="brand-domain">.eu</span></a>
+      <p class="workspace-label">AUTHORIZED OPERATIONS</p>
+      <nav aria-label="Workspace"><a class="nav-item active" href="#applications" aria-current="page">Applications</a><a class="nav-item" href="#history">Operation history</a></nav>
+      <div class="sidebar-bottom"><p class="sidebar-note">Confirmed operations.<br>Independent SSH recovery.</p><a class="button" href="https://dashboard.rmstdope.eu" rel="noreferrer">Public dashboard ↗</a></div>
+    </aside>
+    <div class="content">
+      <header class="topbar"><div class="breadcrumb">rmstdope.eu <span>/</span><strong>Application control</strong></div><nav class="topbar-actions" aria-label="Account"><button class="button" id="theme-toggle" type="button">Switch theme</button><a class="button" href="https://dashboard.rmstdope.eu" rel="noreferrer">Public dashboard</a><a id="login" class="button button-primary" href="/auth/login" hidden>Sign in with GitHub</a><button id="logout" class="button" hidden>Sign out</button></nav></header>
+      <main>
+        <div class="session-bar"><span id="account">Checking sign-in…</span><span>GitHub authorization · Restricted host access</span></div>
+        <section id="welcome" class="welcome" hidden><p class="eyebrow">YOUR OPERATIONS WORKSPACE</p><h1>Your applications. Your control.</h1><p class="subtitle">Sign in with your authorized GitHub account to manage availability, review updates and track operations. Every change starts with a preview.</p></section>
+        <p id="message" role="status" aria-live="polite"></p>
+        <section id="control" hidden>
+          <div class="page-heading"><div><p class="eyebrow">AUTHORIZED OPERATIONS</p><h1>Application control</h1><p class="subtitle">Manage availability and releases with explicit, verified operations.</p></div><button id="refresh" class="button">Refresh</button></div>
+          <section class="metrics" aria-label="Application overview">
+            <div class="metric"><span class="metric-label">APPLICATION HEALTH</span><strong id="health-value" class="metric-value">—</strong><span class="metric-description">Applications currently healthy</span></div>
+            <div class="metric"><span class="metric-label">AUTOMATIC UPDATES</span><strong id="automation-value" class="metric-value">—</strong><span class="metric-description">Applications with automatic updates</span></div>
+            <div class="metric"><span class="metric-label">MAINTENANCE</span><strong id="maintenance-value" class="metric-value">—</strong><span class="metric-description">Applications intentionally offline</span></div>
+          </section>
+          <p class="notice"><strong>Preview first. Apply with confidence.</strong> Manual availability and image operations leave automatic updates paused. Bringing an application online does not resume updates. Database administration and raw logs remain outside this panel.</p>
+          <section id="applications" aria-labelledby="applications-heading">
+            <div class="section-heading"><div><h2 id="applications-heading">Registered applications</h2><p id="summary" class="section-description"></p></div><p id="updated" class="collection-meta"></p></div>
+            <div class="collection-toolbar"><div class="filters" role="group" aria-label="Application type"><button class="filter" data-filter="all" aria-pressed="true">All apps</button><button class="filter" data-filter="frontend" aria-pressed="false">Frontend</button><button class="filter" data-filter="fullstack" aria-pressed="false">Fullstack</button></div><label class="sr-only" for="search">Find an application</label><input class="search" id="search" type="search" placeholder="Find an application…" autocomplete="off"></div>
+            <div id="apps" class="apps"></div><p id="empty" class="empty-state" hidden>No applications match your search.</p>
+          </section>
+          <section id="history" aria-labelledby="history-heading">
+            <div class="section-heading history-heading"><div><h2 id="history-heading">Operation history</h2><p class="section-description">Jobs run one at a time. Closing this page does not cancel an accepted operation.</p></div><span class="collection-meta">5-second refresh</span></div>
+            <ol id="jobs" aria-label="Operation history"></ol>
+          </section>
+        </section>
+        <footer><span>Restricted controls. Confirmed changes. Durable operations.</span><span>Independent SSH recovery.</span></footer>
+      </main>
+    </div>
+  </div>
   <dialog id="confirmation" aria-labelledby="confirm-title">
     <form id="confirm-form">
-      <p class="eyebrow">Review before applying</p><h2 id="confirm-title">Confirm operation</h2>
-      <p id="effects" class="warning"></p>
-      <p id="target"></p>
-      <p id="expiry"></p>
-      <label for="confirm-name">Type the application name to confirm</label>
-      <input id="confirm-name" autocomplete="off" required maxlength="40">
+      <p class="eyebrow">REVIEW BEFORE APPLYING</p><h2 id="confirm-title">Confirm operation</h2>
+      <p id="effects" class="warning"></p><p id="target"></p><p id="expiry"></p>
+      <label for="confirm-name">Type the application name to confirm</label><input class="confirmation-input" id="confirm-name" autocomplete="off" required maxlength="40">
       <p id="confirm-error" role="alert"></p>
-      <div class="actions"><button id="cancel" class="button button-secondary" type="button">Cancel</button><button id="confirm" class="button button-primary" type="submit">Confirm operation</button></div>
+      <div class="actions"><button id="cancel" class="button" type="button">Cancel</button><button id="confirm" class="button button-primary" type="submit">Confirm operation</button></div>
     </form>
   </dialog>
-  <footer>rmstdope control · Confirmed changes. Durable operations. Independent SSH recovery.</footer>
 </body>
 </html>

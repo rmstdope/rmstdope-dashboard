@@ -5,6 +5,13 @@ This is a separate application, **not an extension of the public server**.
 the control UI and API from one HTTPS origin. Host operations and maintenance
 routing live in the companion `rmstdope-infra` implementation.
 
+The Precision UI shares its design tokens, system-aware light/dark preference
+and application search/type filters with the public dashboard. It retains
+per-application operation choices across filtering and refreshes. Health and
+overview values come from executor observations; failed refreshes mark health
+unknown. The private history remains here, never in the public application.
+Theme preferences are stored independently per origin, without sharing sessions.
+
 ## Security and authentication
 
 The dependency-free Node 22 server implements GitHub's server-side OAuth

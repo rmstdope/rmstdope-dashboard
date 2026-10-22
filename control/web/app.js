@@ -1,3 +1,5 @@
+import { collection, title } from "/collection.js";
+
 const $ = selector => document.querySelector(selector);
 const actions = {
   offline: "Take offline (maintenance)", online: "Bring online",
@@ -7,6 +9,9 @@ const actions = {
 let session = null, pending = null, busy = false, loading = false;
 const selectedActions = new Map();
 let renderedApps = null;
+let latestApps = [];
+let refreshFailed = false;
+const visibleApps = collection(() => renderApps(latestApps), app => app.profile);
 function node(tag, value, className) {
   const result = document.createElement(tag);
   if (value !== undefined) result.textContent = value;
@@ -26,6 +31,8 @@ function account(value) {
     $("#apps").replaceChildren(); $("#jobs").replaceChildren(); closePreview();
     selectedActions.clear();
     renderedApps = null;
+    latestApps = [];
+    $("#empty").hidden = true;
   }
 }
 async function api(path, body) {
@@ -65,22 +72,31 @@ function detail(list, label, value) {
   list.append(row);
 }
 function renderApps(apps) {
+  latestApps = apps;
   const healthy = apps.filter(app => app.desired === "online" && app.health === "healthy").length;
   const offline = apps.filter(app => app.desired === "offline").length;
   const paused = apps.filter(app => app.automation === "paused").length;
-  $("#summary").textContent = `${healthy} of ${apps.length} applications healthy · ${offline} offline · ${paused} with updates paused`;
-  const snapshot = JSON.stringify(apps);
+  $("#health-value").textContent = refreshFailed ? "Unknown" : `${healthy} / ${apps.length}`;
+  $("#automation-value").textContent = apps.filter(app => app.automation === "enabled").length;
+  $("#maintenance-value").textContent = offline;
+  $("#summary").textContent = refreshFailed ? "Status unknown — displayed application details may be stale" :
+    `${healthy} of ${apps.length} applications healthy · ${offline} offline · ${paused} with updates paused`;
+  const visible = visibleApps(apps);
+  $("#empty").hidden = !apps.length || visible.length > 0;
+  const snapshot = JSON.stringify([visible, refreshFailed]);
   if (snapshot === renderedApps) return;
   renderedApps = snapshot;
   for (const name of selectedActions.keys()) {
     if (!apps.some(app => app.name === name)) selectedActions.delete(name);
   }
   $("#apps").replaceChildren();
-  for (const app of apps) {
+  for (const app of visible) {
     const card = node("article", undefined, "app-card");
     const heading = node("div", undefined, "card-heading");
-    const status = app.desired === "offline" ? "maintenance" : app.health;
-    heading.append(node("h3", app.name), node("span", status, `badge status-${status}`));
+    const status = app.desired === "offline" ? "maintenance" : refreshFailed ? "unknown" : app.health;
+    const icon = node("span", title(app.name).slice(0, 1), "app-icon");
+    icon.setAttribute("aria-hidden", "true");
+    heading.append(icon, node("h3", title(app.name)), node("span", status, `badge status-${status}`));
     card.append(heading);
     const link = node("a", new URL(app.url).hostname);
     link.href = app.url;
@@ -89,7 +105,7 @@ function renderApps(apps) {
     card.append(link);
     const list = node("dl");
     detail(list, "Desired state", app.desired === "offline" ? "Offline · maintenance" : "Online");
-    detail(list, "Health", app.health);
+    detail(list, "Health", refreshFailed ? "unknown" : app.health);
     const profile = app.profile === "fullstack" ? "Fullstack" : app.profile === "frontend" ? "Frontend" : "Unknown";
     detail(list, "Type", `${profile} (${app.stateful ? "stateful" : "stateless"})`);
     detail(list, "Release", app.version || app.revision || "Not deployed");
@@ -204,12 +220,15 @@ async function refresh(showMessage = true) {
     account(value);
     if (session) {
       const [applications, history] = await Promise.all([api("apps"), api("jobs")]);
+      refreshFailed = false;
       renderApps(applications.apps);
       renderJobs(history.jobs);
       $("#updated").textContent = `Last refreshed ${new Date().toLocaleString("sv-SE")}`;
       if (showMessage) message("");
     }
   } catch {
+    refreshFailed = true;
+    if (session) renderApps(latestApps);
     message("Refresh failed. Displayed state may be stale. Operations require a new executor preview.");
     $("#updated").textContent = "State unknown — refresh failed";
   } finally { loading = false; $("#refresh").disabled = false; }

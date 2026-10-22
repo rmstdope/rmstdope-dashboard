@@ -13,9 +13,12 @@ import {
 
 const SESSION = "__Host-control-session", OAUTH = "__Host-control-oauth";
 const assets = new Map([
-  ["/", ["index.html", "text/html; charset=utf-8"]],
-  ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
-  ["/style.css", ["style.css", "text/css; charset=utf-8"]],
+  ["/", ["./web/index.html", "text/html; charset=utf-8"]],
+  ["/app.js", ["./web/app.js", "text/javascript; charset=utf-8"]],
+  ["/style.css", ["./web/style.css", "text/css; charset=utf-8"]],
+  ["/precision.css", ["../web/precision.css", "text/css; charset=utf-8"]],
+  ["/theme.js", ["../web/theme.js", "text/javascript; charset=utf-8"]],
+  ["/collection.js", ["../web/collection.js", "text/javascript; charset=utf-8"]],
 ]);
 const headers = {
   "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff",
@@ -88,7 +91,7 @@ export function createControlServer(config, dependencies = {}) {
   const reportOAuthFailure = dependencies.reportOAuthFailure ||
     (reason => console.warn(`OAuth callback rejected: ${reason}`));
   const staticAssets = new Map([...assets].map(([route, [name, type]]) => [
-    route, [fs.readFileSync(new URL(`./web/${name}`, import.meta.url)), type],
+    route, [fs.readFileSync(new URL(name, import.meta.url)), type],
   ]));
   let release = { revision: null };
   try {
