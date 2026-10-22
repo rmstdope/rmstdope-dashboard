@@ -4,6 +4,10 @@ Public, read-only application dashboard for `dashboard.rmstdope.eu`.
 Application source and image publishing live here; host collection and runtime
 deployment definitions live in `rmstdope/rmstdope-infra`.
 
+The separately built authorized application at `control.rmstdope.eu` is
+documented in [control/README.md](control/README.md). It does not add an API or
+privileged mounts to the public dashboard.
+
 ## Behavior and data
 
 Static HTML/CSS/JavaScript, no runtime frontend dependencies. App cards display
@@ -22,6 +26,8 @@ the frontend alone cannot determine whether an app stores server-side data.
 The host collector publishes an allowlisted schemaVersion=1 JSON snapshot every
 minute. The browser requests `/status.json` every 30 seconds; data older than
 three minutes or a failed refresh shows **unknown**, never current healthy.
+Intentional offline state appears as **Maintenance (intentionally offline)**,
+with unknown health rather than a fabricated failure or healthy badge.
 Missing initial data shows unavailable. No deployment controls, secrets, raw
 error messages, host metrics, image digests or filesystem paths are exposed.
 
