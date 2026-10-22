@@ -92,3 +92,25 @@ test("timestamps use Swedish format regardless of browser locale", async ({ brow
     await context.close();
   }
 });
+
+test("shows frontend/fullstack and persistence with an unknown fallback for old feeds", async ({ page }) => {
+  const frontend = { ...app, applicationType: "frontend", stateful: false };
+  const fullstack = { ...app, name: "dominos", url: "https://dominos.rmstdope.eu",
+    applicationType: "fullstack", stateful: true };
+  const statelessApi = { ...fullstack, name: "api-example", stateful: false };
+  const legacy = { ...app, name: "legacy" };
+  await page.route("**/status.json", route => route.fulfill({
+    json: feed([frontend, fullstack, statelessApi, legacy]),
+  }));
+  await page.goto("/");
+  const cards = page.locator("article");
+  for (const [index, label] of [
+    "Frontend (stateless)", "Fullstack (stateful)", "Fullstack (stateless)", "Unknown",
+  ].entries()) {
+    const row = cards.nth(index).locator("dl > div").filter({
+      has: page.locator("dt").filter({ hasText: /^Type$/ }),
+    });
+    await expect(row.locator("dd")).toHaveText(label);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

@@ -24,6 +24,9 @@ export function validateSnapshot(data) {
         !states.automation.includes(app.automation) || typeof app.recoveryRequired !== "boolean" ||
         !(app.updateSource === undefined || app.updateSource === null ||
           ["merge", "tag"].includes(app.updateSource)) ||
+        !(app.applicationType === undefined || app.applicationType === null ||
+          ["frontend", "fullstack"].includes(app.applicationType)) ||
+        !(app.stateful === undefined || app.stateful === null || typeof app.stateful === "boolean") ||
         !(app.revision === null || /^[a-f0-9]{12}$/.test(app.revision)) ||
         !(app.version === null || /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(app.version)) ||
         !(app.deployedAt === null || timestamp(app.deployedAt))) {
@@ -41,6 +44,14 @@ export function isStale(snapshot, now = Date.now()) {
 
 export function displayHealth(app, stale) {
   return stale ? "unknown" : app.health;
+}
+
+export function applicationTypeLabel(app) {
+  const type = app.applicationType === "frontend" ? "Frontend" :
+    app.applicationType === "fullstack" ? "Fullstack" : "Unknown";
+  const persistence = app.stateful === true ? "stateful" :
+    app.stateful === false ? "stateless" : "persistence unknown";
+  return type === "Unknown" && app.stateful == null ? "Unknown" : `${type} (${persistence})`;
 }
 
 export function title(name) {

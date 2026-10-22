@@ -1,4 +1,4 @@
-import { validateSnapshot, isStale, displayHealth, title } from "./model.js";
+import { validateSnapshot, isStale, displayHealth, applicationTypeLabel, title } from "./model.js";
 
 let snapshot = null;
 let failed = false;
@@ -58,6 +58,7 @@ function render() {
       element("p", "hostname", new URL(app.url).hostname));
     if (app.recoveryRequired) card.append(element("p", "warning", "Recovery required"));
     const details = element("dl");
+    detail(details, "Type", applicationTypeLabel(app));
     detail(details, "Status", stale ? "Unknown (stale)" : labels[app.status]);
     if (app.version) detail(details, "Version", app.version);
     detail(details, "Revision", app.revision || "Not available");

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateSnapshot, isStale, displayHealth, title } from "../web/model.js";
+import { validateSnapshot, isStale, displayHealth, applicationTypeLabel, title } from "../web/model.js";
 
 const app = {
   name: "example", url: "https://example.rmstdope.eu", health: "healthy",
@@ -47,4 +47,23 @@ test("accepts old snapshots and validates optional update source", () => {
     validateSnapshot({ ...snapshot, apps: [{ ...app, updateSource }] });
   }
   assert.throws(() => validateSnapshot({ ...snapshot, apps: [{ ...app, updateSource: "arbitrary" }] }));
+});
+
+test("validates classification without equating fullstack with stateful", () => {
+  for (const [applicationType, stateful, label] of [
+    ["frontend", false, "Frontend (stateless)"],
+    ["fullstack", true, "Fullstack (stateful)"],
+    ["fullstack", false, "Fullstack (stateless)"],
+    [undefined, undefined, "Unknown"],
+    [null, null, "Unknown"],
+    ["frontend", undefined, "Frontend (persistence unknown)"],
+    [undefined, true, "Unknown (stateful)"],
+  ]) {
+    const entry = { ...app, applicationType, stateful };
+    validateSnapshot({ ...snapshot, apps: [entry] });
+    assert.equal(applicationTypeLabel(entry), label);
+  }
+  for (const change of [{ applicationType: "backend" }, { stateful: "false" }, { stateful: 0 }]) {
+    assert.throws(() => validateSnapshot({ ...snapshot, apps: [{ ...app, ...change }] }));
+  }
 });
