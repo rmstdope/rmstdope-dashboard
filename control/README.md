@@ -80,6 +80,7 @@ runtime, provisions DNS/TLS/proxy routing and starts this service:
    | `ADMIN_GITHUB_IDS` | Explicit comma-separated stable numeric IDs |
    | `SESSION_STORE_DIR` | `/sessions` |
    | `EXECUTOR_SOCKET` | `/run/executor/executor.sock` |
+   | `TRUSTED_PROXY_IPS` | Exact internal Caddy peer IP(s), comma-separated, after reviewing the proxy boundary |
 
    OAuth credentials belong only to this unprivileged service. Privileged
    deployment/GitHub pull credentials belong only to the infra executor's
@@ -92,6 +93,20 @@ runtime, provisions DNS/TLS/proxy routing and starts this service:
    above 100 seconds. Do not expose port 8081 publicly. Do not proxy the control
    app under the public dashboard origin. Disable/redact access logging of
    callback query parameters, cookies and authorization headers at the proxy.
+   Configure Caddy to **overwrite** `X-Control-Client-IP` with `{remote_host}`
+   (`header_up X-Control-Client-IP {remote_host}`), never append/preserve a
+   browser-supplied value. Set `TRUSTED_PROXY_IPS` to Caddy's actual fixed peer
+   address on the dedicated internal network; no CIDR, wildcard or automatic
+   trust of private networks is supported. Do not trust a CDN-supplied client
+   identity unless its boundary is separately reviewed. A trusted peer missing
+   a valid single client IP fails closed at login. An untrusted peer's forwarding
+   headers, including XFF, are ignored.
+   Login attempts are limited to 10/client/minute plus a bounded 300/minute
+   global ceiling; one client cannot exhaust all global slots. Without an
+   explicit trusted peer, limits use the direct socket IP (so an unconfigured
+   shared proxy would share a client bucket). Verify isolation between two
+   clients before installation approval. If Caddy's peer IP changes, update
+   the protected configuration; do not broaden proxy trust to compensate.
 6. Fail-closed startup requires every setting and valid existing session JSON.
    Smoke-test unauthorized API denial, allowlisted login, disallowed login,
    CSRF denial, preview/cancel, logout and session revocation before approving

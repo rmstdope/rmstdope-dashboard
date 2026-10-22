@@ -33,6 +33,7 @@ async function fixture(t, overrides = {}) {
   const config = {
     origin, admins: new Set([actor]), clientId: "client", clientSecret: "secret",
     socket: "/unused", storeDir: path.dirname(store.file),
+    trustedProxyIPs: new Set(overrides.trustedProxyIPs || []),
   };
   const calls = [];
   const executor = async request => {
@@ -100,6 +101,7 @@ test("configuration fails closed without explicit admins, secrets and HTTPS cano
     { GITHUB_CLIENT_SECRET: "" }, { CONTROL_ORIGIN: "http://control.rmstdope.eu" },
     { CONTROL_ORIGIN: `${origin}/path` }, { CONTROL_ORIGIN: `${origin}/` },
     { EXECUTOR_SOCKET: "relative" },
+    { TRUSTED_PROXY_IPS: "*" }, { TRUSTED_PROXY_IPS: "172.16.0.0/12" },
   ]) assert.throws(() => configuration({ ...env, ...change }));
 });
 
@@ -205,6 +207,35 @@ test("OAuth callback rejects forged/replayed state and rotates host-only secure 
   assert.equal(f.store.session(f.id, f.config.admins), null);
   assert.equal((await f.request(callback, { headers: { Cookie: binding } })).status, 400);
   assert.equal((await f.request("/auth/login?next=https://evil.example")).status, 404);
+});
+
+test("login rate limit isolates clients only through explicitly trusted proxy and ignores browser forwarding headers", async t => {
+  const direct = await fixture(t);
+  for (let index = 0; index < 10; index++) {
+    assert.equal((await direct.request("/auth/login", { auth: false, headers: {
+      "X-Forwarded-For": `192.0.2.${index + 1}`, "X-Control-Client-IP": `192.0.2.${index + 1}`,
+    } })).status, 303);
+  }
+  assert.equal((await direct.request("/auth/login", { auth: false,
+    headers: { "X-Forwarded-For": "198.51.100.1" },
+  })).status, 429);
+  const proxied = await fixture(t, { trustedProxyIPs: ["127.0.0.1"] });
+  assert.equal((await proxied.request("/auth/login", { auth: false })).status, 400);
+  assert.equal((await proxied.request("/auth/login", { auth: false,
+    headers: { "X-Control-Client-IP": "192.0.2.1, 192.0.2.2" },
+  })).status, 400);
+  const request = ip => proxied.request("/auth/login", { auth: false,
+    headers: { "X-Control-Client-IP": ip },
+  });
+  for (let index = 0; index < 10; index++) assert.equal((await request("192.0.2.1")).status, 303);
+  assert.equal((await request("192.0.2.1")).status, 429);
+  assert.equal((await request("192.0.2.2")).status, 303);
+  for (let index = 0; index < 289; index++) {
+    assert.equal((await request(`198.51.${Math.floor(index / 250)}.${index % 250 + 1}`)).status, 303);
+  }
+  assert.equal((await request("203.0.113.1")).status, 429);
+  proxied.advance(60_000);
+  assert.equal((await request("192.0.2.1")).status, 303);
 });
 
 test("API never accepts browser actor, paths, shell or image references; all writes require exact Origin and CSRF", async t => {

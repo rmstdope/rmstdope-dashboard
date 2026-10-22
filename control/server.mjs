@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { timingSafeEqual } from "node:crypto";
+import { isIP } from "node:net";
 import { configuration } from "./config.mjs";
 import { Store, RECENT } from "./store.mjs";
 import { authorizationURL, authenticate } from "./oauth.mjs";
@@ -94,6 +95,32 @@ export function createControlServer(config, dependencies = {}) {
   } catch { /* Local development has no built image identity. */ }
   let oauthActive = 0;
   const loginAttempts = [];
+  const clientLogins = new Map();
+  const address = value => value?.startsWith("::ffff:") ? value.slice(7) : value;
+  function limitLogin(req) {
+    let client = address(req.socket.remoteAddress);
+    const trusted = config.trustedProxyIPs || new Set();
+    if (trusted.has(req.socket.remoteAddress) || trusted.has(client)) {
+      const forwarded = req.headers["x-control-client-ip"];
+      if (typeof forwarded !== "string" || !isIP(forwarded)) {
+        fail(400, "invalid_proxy_client", "Trusted proxy must supply one valid client IP.");
+      }
+      client = address(forwarded);
+    }
+    const cutoff = now() - 60_000;
+    while (loginAttempts.length && loginAttempts[0] <= cutoff) loginAttempts.shift();
+    for (const [key, attempts] of clientLogins) {
+      while (attempts.length && attempts[0] <= cutoff) attempts.shift();
+      if (!attempts.length) clientLogins.delete(key);
+    }
+    const attempts = clientLogins.get(client) || [];
+    if (attempts.length >= 10 || loginAttempts.length >= 300 || clientLogins.size >= 1000) {
+      fail(429, "rate_limited", "Try signing in again in a minute.");
+    }
+    attempts.push(now());
+    clientLogins.set(client, attempts);
+    loginAttempts.push(now());
+  }
   async function call(request) {
     const result = await executor(request);
     if (result.error) {
@@ -128,9 +155,7 @@ export function createControlServer(config, dependencies = {}) {
       const sessionId = jar[SESSION];
       if (sessionId && !/^[a-zA-Z0-9_-]{43}$/.test(sessionId)) fail(401, "unauthorized", "Sign in again.");
       if (req.method === "GET" && url.pathname === "/auth/login" && !url.search) {
-        while (loginAttempts.length && loginAttempts[0] < now() - 60_000) loginAttempts.shift();
-        if (loginAttempts.length >= 30) fail(429, "rate_limited", "Try signing in again in a minute.");
-        loginAttempts.push(now());
+        limitLogin(req);
         const attempt = store.startOAuth();
         return redirect(authorizationURL(config, attempt), [cookie(OAUTH, attempt.binding, 600)]);
       }
