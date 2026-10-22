@@ -5,6 +5,8 @@ const actions = {
   update: "Update now", restart: "Restart HTTP services", rollback: "Rollback application image",
 };
 let session = null, pending = null, busy = false, loading = false;
+const selectedActions = new Map();
+let renderedApps = null;
 function node(tag, value, className) {
   const result = document.createElement(tag);
   if (value !== undefined) result.textContent = value;
@@ -19,7 +21,12 @@ function account(value) {
   $("#login").textContent = session ? "Sign in again (refresh authorization)" : "Sign in with GitHub";
   $("#logout").hidden = !session;
   $("#control").hidden = !session;
-  if (!session) { $("#apps").replaceChildren(); $("#jobs").replaceChildren(); closePreview(); }
+  $("#welcome").hidden = Boolean(session);
+  if (!session) {
+    $("#apps").replaceChildren(); $("#jobs").replaceChildren(); closePreview();
+    selectedActions.clear();
+    renderedApps = null;
+  }
 }
 async function api(path, body) {
   const response = await fetch(`/api/${path}`, {
@@ -58,10 +65,23 @@ function detail(list, label, value) {
   list.append(row);
 }
 function renderApps(apps) {
+  const healthy = apps.filter(app => app.desired === "online" && app.health === "healthy").length;
+  const offline = apps.filter(app => app.desired === "offline").length;
+  const paused = apps.filter(app => app.automation === "paused").length;
+  $("#summary").textContent = `${healthy} of ${apps.length} applications healthy · ${offline} offline · ${paused} with updates paused`;
+  const snapshot = JSON.stringify(apps);
+  if (snapshot === renderedApps) return;
+  renderedApps = snapshot;
+  for (const name of selectedActions.keys()) {
+    if (!apps.some(app => app.name === name)) selectedActions.delete(name);
+  }
   $("#apps").replaceChildren();
   for (const app of apps) {
-    const card = node("article");
-    card.append(node("h3", app.name));
+    const card = node("article", undefined, "app-card");
+    const heading = node("div", undefined, "card-heading");
+    const status = app.desired === "offline" ? "maintenance" : app.health;
+    heading.append(node("h3", app.name), node("span", status, `badge status-${status}`));
+    card.append(heading);
     const link = node("a", new URL(app.url).hostname);
     link.href = app.url;
     link.target = "_blank";
@@ -70,7 +90,8 @@ function renderApps(apps) {
     const list = node("dl");
     detail(list, "Desired state", app.desired === "offline" ? "Offline · maintenance" : "Online");
     detail(list, "Health", app.health);
-    detail(list, "Type", `${app.profile} (${app.stateful ? "stateful" : "stateless"})`);
+    const profile = app.profile === "fullstack" ? "Fullstack" : app.profile === "frontend" ? "Frontend" : "Unknown";
+    detail(list, "Type", `${profile} (${app.stateful ? "stateful" : "stateless"})`);
     detail(list, "Release", app.version || app.revision || "Not deployed");
     detail(list, "Automatic updates", app.automation);
     card.append(list);
@@ -78,7 +99,7 @@ function renderApps(apps) {
     if (app.protected) {
       card.append(node("p", "Protected application: use the reviewed host workflow.", "notice"));
     } else {
-      const form = node("form");
+      const form = node("form", undefined, "operation-form");
       const select = node("select");
       select.id = `action-${app.name}`;
       select.setAttribute("aria-label", `Operation for ${app.name}`);
@@ -91,8 +112,12 @@ function renderApps(apps) {
           (app.desired === "online" && action === "online");
         select.append(option);
       }
-      select.value = app.desired === "offline" ? "online" : "pause";
-      const button = node("button", "Preview operation");
+      const chosen = selectedActions.get(app.name);
+      select.value = [...select.options].some(option => option.value === chosen && !option.disabled)
+        ? chosen : app.desired === "offline" ? "online" : "pause";
+      selectedActions.set(app.name, select.value);
+      select.addEventListener("change", () => selectedActions.set(app.name, select.value));
+      const button = node("button", "Preview operation", "button button-primary");
       button.type = "submit";
       button.disabled = busy || app.recoveryRequired;
       form.append(label, select, button);
@@ -126,13 +151,16 @@ function renderApps(apps) {
 function renderJobs(jobs) {
   $("#jobs").replaceChildren();
   for (const job of jobs) {
-    const item = node("li");
-    item.append(node("strong", `${job.app} · ${actions[job.action]} · ${job.status}`),
+    const item = node("li", undefined, "job");
+    const heading = node("div", undefined, "card-heading");
+    heading.append(node("strong", `${job.app} · ${actions[job.action]}`),
+      node("span", job.status, `badge status-${job.status}`));
+    item.append(heading,
       node("p", job.message),
       node("small", `${job.id} · updated ${new Date(job.updatedAt * 1000).toLocaleString("sv-SE")}`));
     $("#jobs").append(item);
   }
-  if (!jobs.length) $("#jobs").append(node("li", "No operations recorded."));
+  if (!jobs.length) $("#jobs").append(node("li", "No operations yet. Confirmed operations and their progress will appear here.", "empty-state"));
 }
 function closePreview() {
   pending = null;

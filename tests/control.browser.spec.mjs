@@ -12,7 +12,8 @@ const job = {
   createdAt: 1800000000, updatedAt: 1800000000, message: "Waiting for the executor.",
 };
 async function setup(page, options = {}) {
-  const submits = [], errors = [];
+  const submits = [], previews = [], errors = [];
+  let appRequests = 0;
   let authenticated = options.authenticated !== false;
   let submitCount = 0;
   page.on("pageerror", error => errors.push(error.message));
@@ -27,12 +28,16 @@ async function setup(page, options = {}) {
     const json = value => route.fulfill({ json: value });
     if (url.pathname === "/api/session") return json(authenticated ? signedIn : { authenticated: false });
     if (url.pathname === "/api/logout") { authenticated = false; return json({ ok: true }); }
-    if (url.pathname === "/api/apps") return json({ apps: options.apps || [app, {
-      ...app, name: "control", protected: true,
-    }] });
+    if (url.pathname === "/api/apps") {
+      appRequests++;
+      return json({ apps: typeof options.apps === "function" ? options.apps() : options.apps || [app, {
+        ...app, name: "control", protected: true,
+      }] });
+    }
     if (url.pathname === "/api/jobs") return json({ jobs: options.jobs ? options.jobs() : [] });
     if (url.pathname === "/api/preview") {
       const request = route.request().postDataJSON();
+      previews.push(request);
       return json({ preview: {
         id: "c".repeat(32), ...request, expiresAt: Math.floor(Date.now() / 1000) + 120,
         revision: app.revision, version: app.version,
@@ -50,15 +55,63 @@ async function setup(page, options = {}) {
     return route.fulfill({ status: 404, json: {} });
   });
   await page.goto("/");
-  return { submits, errors };
+  return { submits, previews, errors, appRequests: () => appRequests };
 }
 
 test("signed-out control has explicit GitHub sign-in and no operation controls", async ({ page }) => {
   const { errors } = await setup(page, { authenticated: false });
   await expect(page.getByText("Not signed in", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Sign in with GitHub" })).toHaveAttribute("href", "/auth/login");
+  for (const name of ["Sign in with GitHub", "Public dashboard"]) {
+    const link = page.getByRole("link", { name, exact: true });
+    const style = await link.evaluate(node => {
+      const css = getComputedStyle(node);
+      return { display: css.display, height: node.getBoundingClientRect().height,
+        decoration: css.textDecorationLine };
+    });
+    expect(["flex", "inline-flex"]).toContain(style.display);
+    expect(style.height).toBeGreaterThanOrEqual(44);
+    expect(style.decoration).toBe("none");
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole("button", { name: "Preview operation" })).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test("selected actions survive scheduled and changed-state refreshes and reach the preview unchanged", async ({ page }) => {
+  await page.clock.install();
+  let current = { ...app };
+  const result = await setup(page, { apps: () => [current] });
+  const select = page.getByRole("combobox", { name: "Operation for example" });
+  await expect(select).toHaveValue("pause");
+  await select.selectOption("update");
+  await select.focus();
+  const previous = result.appRequests();
+  await page.clock.runFor(5100);
+  await expect.poll(result.appRequests).toBeGreaterThan(previous);
+  await expect(select).toHaveValue("update");
+  await expect(select).toBeFocused();
+
+  current = { ...current, health: "healthy" };
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(page.locator(".status-healthy")).toBeVisible();
+  await expect(select).toHaveValue("update");
+  for (const action of ["update", "restart", "rollback", "resume", "offline", "pause"]) {
+    await select.selectOption(action);
+    await page.getByRole("button", { name: "Preview operation" }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    expect(result.previews.at(-1)).toEqual({ app: "example", action });
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  }
+  current = { ...current, desired: "offline" };
+  await select.selectOption("restart");
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(select).toHaveValue("online");
+  await page.getByRole("button", { name: "Preview operation" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(result.previews.at(-1)).toEqual({ app: "example", action: "online" });
+  expect(result.submits).toHaveLength(0);
+  expect(result.errors).toEqual([]);
 });
 
 test("typed confirmation, database warning, protected self apps and sign out", async ({ page }) => {
