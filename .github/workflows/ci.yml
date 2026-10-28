@@ -9,7 +9,8 @@ permissions:
 
 jobs:
   web:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 has no Chromium build for ubuntu-26.04 (the current ubuntu-latest).
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -89,7 +90,8 @@ jobs:
           retention-days: 90
 
   control:
-    runs-on: ubuntu-latest
+    # Playwright 1.56 has no Chromium build for ubuntu-26.04 (the current ubuntu-latest).
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
