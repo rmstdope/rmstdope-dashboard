@@ -30,7 +30,7 @@ export const warnings = {
 
 export function cleanApp(app) {
   if (!app || !appName(app.name) || !text(app.url) ||
-      !/^https:\/\/[a-z][a-z0-9-]{0,39}\.rmstdope\.eu$/.test(app.url) ||
+      !/^https:\/\/(?:[a-z][a-z0-9-]{0,39}\.)?rmstdope\.eu$/.test(app.url) ||
       !["online", "offline"].includes(app.desired) ||
       !["enabled", "paused", "manual"].includes(app.automation) ||
       !["healthy", "unhealthy", "unknown"].includes(app.health) ||

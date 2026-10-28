@@ -16,6 +16,8 @@ test("rejects unsafe links, malformed health, duplicates and unsupported schema"
     { ...snapshot, generatedAt: "invalid" },
     { ...snapshot, apps: [app, app] },
     ...[{ url: "javascript:alert(1)" }, { url: "https://external.example" },
+      { url: "https://evilrmstdope.eu" }, { url: "https://rmstdope.eu.example" },
+      { url: "https://.rmstdope.eu" }, { url: "https://a.b.rmstdope.eu" }, { url: "http://rmstdope.eu" },
       { name: "<script>" }, { health: "fine" }, { version: "<img>" },
       { revision: "not-a-revision" }].map(change => ({ ...snapshot, apps: [{ ...app, ...change }] })),
   ]) assert.throws(() => validateSnapshot(value));
@@ -41,6 +43,11 @@ test("accepts all deployed status cases and an empty directory", () => {
     validateSnapshot({ ...snapshot, apps: [{ ...app, status }] });
   }
   validateSnapshot({ ...snapshot, apps: [] });
+});
+
+test("accepts an app on the apex domain alongside subdomain apps", () => {
+  // The infrastructure registers apex apps (e.g. landing at https://rmstdope.eu).
+  validateSnapshot({ ...snapshot, apps: [app, { ...app, name: "landing", url: "https://rmstdope.eu" }] });
 });
 
 test("supports registered aliases and consecutive/trailing hyphens in app names", () => {

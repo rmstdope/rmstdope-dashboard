@@ -18,7 +18,7 @@ export function validateSnapshot(data) {
   for (const app of data.apps) {
     if (!app || typeof app.name !== "string" || !namePattern.test(app.name) ||
         names.has(app.name) || typeof app.url !== "string" ||
-        !/^https:\/\/[a-z][a-z0-9-]{0,39}\.rmstdope\.eu$/.test(app.url) ||
+        !/^https:\/\/(?:[a-z][a-z0-9-]{0,39}\.)?rmstdope\.eu$/.test(app.url) ||
         !states.health.includes(app.health) || !states.health.includes(app.publicHealth) ||
         !states.health.includes(app.containerHealth) || !states.status.includes(app.status) ||
         !states.automation.includes(app.automation) || typeof app.recoveryRequired !== "boolean" ||

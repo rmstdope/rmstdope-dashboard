@@ -486,3 +486,11 @@ test("HTTP API to real Unix executor mock preserves exact framing, keys and acto
   assert.equal((await f.request(`/api/jobs/${jobId}`)).status, 200);
   assert.deepEqual(received.map(request => request.operation), ["list", "list", "preview", "submit", "jobs", "job"]);
 });
+
+test("apex-domain apps are accepted; look-alike domains are not", () => {
+  assert.equal(cleanApp({ ...app, name: "landing", url: "https://rmstdope.eu" }).url, "https://rmstdope.eu");
+  for (const url of ["https://evilrmstdope.eu", "https://rmstdope.eu.example", "https://.rmstdope.eu",
+    "https://a.b.rmstdope.eu", "http://rmstdope.eu"]) {
+    assert.throws(() => cleanApp({ ...app, url }), url);
+  }
+});
