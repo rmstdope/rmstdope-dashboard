@@ -182,8 +182,9 @@ The executor responds with `{apps}`, `{preview}`, `{job}`, `{jobs}`, or
 approved companion contract. Expiry/job timestamps are epoch seconds.
 The API validates and projects output; it replaces job messages and action
 warnings with fixed safe text and strips actor, images and release internals.
-Rejections show a fixed explanation only for allowlisted executor reasons (such
-as not enrolled or automation drift); other reasons stay generic.
+Rejections show a fixed explanation only for exact allowlisted executor reasons
+(such as not enrolled or automation drift); unmatched reasons, other error codes
+and non-string messages fall back to the generic text.
 Job states are queued/running/succeeded/failed/interrupted. Unknown or stale
 health stays unknown; offline always displays unknown. Neither a pending job
 nor a successful liveness request fabricates app health.

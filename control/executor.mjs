@@ -22,7 +22,7 @@ export const warnings = {
   offline: "Stops application HTTP services and enables maintenance mode. The database stays running. Automatic updates remain paused.",
   online: "Starts the current release and checks health. Automatic updates remain paused.",
   pause: "Pauses automatic updates without stopping the application.",
-  resume: "Enables automatic updates. The executor rejects offline or recovery-required applications.",
+  resume: "Enables automatic updates. An eligible newer release deploys on the next poll, replacing the current release; this may undo a rollback. The executor rejects offline or recovery-required applications.",
   update: "Deploys the previewed release and checks health. Automatic updates remain paused. Database migrations may be forward-only.",
   restart: "Restarts application HTTP services, not the database. Automatic updates remain paused.",
   rollback: "Restores the previous application image only. The database is NOT rolled back: schema migrations may be incompatible. Automatic updates remain paused.",

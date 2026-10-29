@@ -83,9 +83,9 @@ const executorErrors = {
   invalid_request: [400, "The executor rejected this request."],
 };
 // Exact executor rejection reasons mapped to fixed text; anything else stays generic.
-const rejectionReasons = new Map([
+export const rejectionReasons = new Map([
   ["Application is not enrolled", "Application is not enrolled for automatic updates. Enroll and baseline it with the CLI."],
-  ["Automation drift needs CLI reconciliation", "Application definitions or installed tooling differ from the automatic update baseline. Reconcile with the CLI before resuming."],
+  ["Automation drift needs CLI reconciliation", "Application definitions or installed tooling differ from the automatic update baseline. Reconcile with the CLI."],
   ["Interrupted attempt needs CLI recovery", "An interrupted automatic update needs CLI recovery."],
   ["Application is not in maintenance", "Application is not in maintenance."],
   ["Application is already up to date", "Application is already up to date."],
@@ -95,6 +95,9 @@ const rejectionReasons = new Map([
   ["Operation queue is full", "Operation queue is full. Try again after queued operations finish."],
   ["Preview expired; preview again", "Preview expired. Preview again."],
   ["Preview already submitted", "Preview was already submitted. Check history."],
+  ["Job not found", "Job not found."],
+  ["Invalid job ID", "Job not found."],
+  ["Administrator is not authorized", "This account is not authorized by the executor."],
 ]);
 
 export function createControlServer(config, dependencies = {}) {

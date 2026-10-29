@@ -6,12 +6,16 @@ import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { once } from "node:events";
 import { Store } from "../control/store.mjs";
-import { createControlServer } from "../control/server.mjs";
+import { createControlServer, rejectionReasons } from "../control/server.mjs";
 import { execute } from "../control/executor.mjs";
 
 const infra = process.env.INFRA_CHECKOUT;
 if (!infra || !fs.existsSync(path.join(infra, "src/rmstdope_deploy/control.py"))) {
   throw new Error("Set INFRA_CHECKOUT to the reviewed rmstdope-infra checkout");
+}
+const executorSource = fs.readFileSync(path.join(infra, "src/rmstdope_deploy/control.py"), "utf8");
+for (const reason of rejectionReasons.keys()) {
+  assert.ok(executorSource.includes(JSON.stringify(reason)), `Executor no longer rejects with: ${reason}`);
 }
 const dir = path.join(process.cwd(), `contract-test-${process.pid}`);
 fs.mkdirSync(dir, { mode: 0o700 });
