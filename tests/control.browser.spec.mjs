@@ -278,6 +278,8 @@ for (const action of ["offline", "online"]) {
     await expect(page.locator("#summary")).toContainText("last known application state");
     await expect(other.locator(".status-healthy")).toBeVisible();
     await expect(other.locator("dt").filter({ hasText: "Last known health" })).toBeVisible();
+    await expect(other.locator("dl > div").filter({ has: page.locator("dt", { hasText: /^Status$/ }) })
+      .locator("dd")).toHaveText("Unknown (last known)");
     await expect(page.locator("#jobs")).toContainText("running");
     status = "succeeded";
     await page.clock.runFor(5100);

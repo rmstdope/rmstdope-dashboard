@@ -410,8 +410,11 @@ test("executor errors are mapped to fixed messages, malformed and unsafe output 
   const offline = cleanApp({ ...detailed, desired: "offline" });
   assert.deepEqual([offline.status, offline.publicHealth, offline.containerHealth], ["maintenance", "unknown", "unknown"]);
   assert.equal(cleanApp({ ...detailed, desired: "offline", status: "recovery-required" }).status, "recovery-required");
+  assert.equal(cleanApp({ ...detailed, desired: "offline", status: "not-deployed" }).status, "not-deployed");
+  assert.equal(cleanApp({ ...detailed, deployedAt: "2026-10-29T10:44:53Z" }).deployedAt, "2026-10-29T10:44:53.000Z");
   for (const bad of [{ status: "fine" }, { publicHealth: "<b>" }, { containerHealth: 1 },
-    { deployedAt: "yesterday" }, { deployedAt: "x".repeat(41) }, { updateSource: "branch" }]) {
+    { deployedAt: "yesterday" }, { deployedAt: "x".repeat(41) }, { deployedAt: "2026-10-29T10:44:53" },
+    { updateSource: "branch" }]) {
     assert.throws(() => cleanApp({ ...detailed, ...bad }), /Invalid executor app/);
   }
   assert.throws(() => cleanJob({ id: jobId, app: "example", action: "shell" }));

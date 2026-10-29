@@ -118,14 +118,15 @@ function renderApps(apps) {
     card.append(link);
     const list = node("dl");
     detail(list, "Desired state", app.desired === "offline" ? "Offline · maintenance" : "Online");
-    detail(list, refreshDeferred ? "Last known health" : "Health", refreshFailed ? "unknown" : app.health);
+    detail(list, refreshDeferred ? "Last known health" : "Health", refreshFailed ? "Unknown" : labels[app.health]);
     const profile = app.profile === "fullstack" ? "Fullstack" : app.profile === "frontend" ? "Frontend" : "Unknown";
     detail(list, "Type", `${profile} (${app.stateful ? "stateful" : "stateless"})`);
-    detail(list, "Status", refreshFailed ? "Unknown (stale)" : labels[app.status]);
+    const known = value => refreshFailed ? "Unknown" : `${labels[value]}${refreshDeferred ? " (last known)" : ""}`;
+    detail(list, "Status", refreshFailed ? "Unknown (stale)" : known(app.status));
     if (app.version) detail(list, "Version", app.version);
     detail(list, "Revision", app.revision ? app.revision.slice(0, 12) : "Not available");
-    detail(list, "Public HTTPS", refreshFailed ? "Unknown" : labels[app.publicHealth]);
-    detail(list, "Container", refreshFailed ? "Unknown" : labels[app.containerHealth]);
+    detail(list, "Public HTTPS", known(app.publicHealth));
+    detail(list, "Container", known(app.containerHealth));
     detail(list, "Deployment", app.deployedAt ? new Date(app.deployedAt).toLocaleString("sv-SE") : "Not available");
     const updates = app.automation === "enabled" && app.updateSource ?
       `Automatic (${app.updateSource})` : labels[app.automation];

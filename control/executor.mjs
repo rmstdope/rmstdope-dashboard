@@ -16,7 +16,7 @@ const appStatuses = ["running", "degraded", "not-deployed", "recovery-required",
 // Card details are optional so an older executor still yields explicit unknowns.
 const optional = (value, valid) => value === undefined || value === null || valid(value);
 const deployedAt = value => typeof value === "string" && value.length <= 40 &&
-  /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value));
+  /^\d{4}-\d{2}-\d{2}T[^Z+]*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const epoch = value => typeof value === "number" && Number.isFinite(value) &&
   value >= 0 && value <= Number.MAX_SAFE_INTEGER;
 const messages = {
@@ -61,7 +61,8 @@ export function cleanApp(app) {
     health: offline ? "unknown" : app.health,
     publicHealth: offline ? "unknown" : app.publicHealth ?? "unknown",
     containerHealth: offline ? "unknown" : app.containerHealth ?? "unknown",
-    status: offline && app.status !== "recovery-required" ? "maintenance" : app.status ?? "unknown",
+    status: offline && !["recovery-required", "not-deployed"].includes(app.status) ? "maintenance" :
+      app.status ?? "unknown",
     deployedAt: app.deployedAt ? new Date(app.deployedAt).toISOString() : null,
     updateSource: app.updateSource ?? null,
   };
