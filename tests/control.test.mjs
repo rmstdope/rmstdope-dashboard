@@ -376,6 +376,16 @@ test("executor errors are mapped to fixed messages, malformed and unsafe output 
   const result = await rejected.request("/api/apps");
   assert.equal(result.status, 409);
   assert.equal(result.text.includes("SECRET_TOKEN"), false);
+  assert.match(JSON.parse(result.text).error.message, /offline, protected or recovery-required/);
+  const drift = await fixture(t, { execute: async () => ({
+    error: { code: "rejected", message: "Automation drift needs CLI reconciliation" },
+  }) });
+  const reason = await drift.request("/api/apps");
+  assert.equal(reason.status, 409);
+  assert.deepEqual(JSON.parse(reason.text).error, { code: "rejected",
+    message: "Deployed release, definitions or tooling differ from the automatic update baseline. Reconcile with the CLI before resuming." });
+  const inherited = await fixture(t, { execute: async () => ({ error: { code: "toString", message: "x" } }) });
+  assert.equal((await inherited.request("/api/apps")).status, 502);
   const malformed = await fixture(t, { execute: async () => ({ apps: [{ ...app, url: "javascript:alert(1)" }] }) });
   assert.equal((await malformed.request("/api/apps")).status, 503);
   assert.equal(cleanApp({ ...app, desired: "offline", health: "healthy" }).health, "unknown");

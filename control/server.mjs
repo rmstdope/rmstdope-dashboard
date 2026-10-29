@@ -82,6 +82,20 @@ const executorErrors = {
   busy: [409, "Another operation is in progress."],
   invalid_request: [400, "The executor rejected this request."],
 };
+// Exact executor rejection reasons mapped to fixed text; anything else stays generic.
+const rejectionReasons = new Map([
+  ["Application is not enrolled", "Application is not enrolled for automatic updates. Enroll and baseline it with the CLI."],
+  ["Automation drift needs CLI reconciliation", "Deployed release, definitions or tooling differ from the automatic update baseline. Reconcile with the CLI before resuming."],
+  ["Interrupted attempt needs CLI recovery", "An interrupted automatic update needs CLI recovery."],
+  ["Application is not in maintenance", "Application is not in maintenance."],
+  ["Application is already up to date", "Application is already up to date."],
+  ["No previous release exists", "No previous release exists."],
+  ["Action is unavailable for this application", "This action is unavailable for this application."],
+  ["Unknown application", "Application not found."],
+  ["Operation queue is full", "Operation queue is full. Try again after queued operations finish."],
+  ["Preview expired; preview again", "Preview expired. Preview again."],
+  ["Preview already submitted", "Preview was already submitted. Check history."],
+]);
 
 export function createControlServer(config, dependencies = {}) {
   const now = dependencies.now || Date.now;
@@ -129,8 +143,10 @@ export function createControlServer(config, dependencies = {}) {
   async function call(request) {
     const result = await executor(request);
     if (result.error) {
-      const [status, message] = executorErrors[result.error.code] || [502, "Executor could not complete the request."];
-      fail(status, Object.hasOwn(executorErrors, result.error.code) ? result.error.code : "executor_error", message);
+      const known = Object.hasOwn(executorErrors, result.error.code);
+      const [status, message] = known ? executorErrors[result.error.code] : [502, "Executor could not complete the request."];
+      const reason = result.error.code === "rejected" && rejectionReasons.get(result.error.message);
+      fail(status, known ? result.error.code : "executor_error", reason || message);
     }
     return result;
   }
