@@ -7,9 +7,11 @@ routing live in the companion `rmstdope-infra` implementation.
 
 The Precision UI shares its design tokens, system-aware light/dark preference
 and application search/type filters with the public dashboard. It retains
-per-application operation choices across filtering and refreshes. Health and
-overview values come from executor observations; failed refreshes mark health
-unknown. The private history remains here, never in the public application.
+per-application operation choices across filtering and refreshes. Each card
+shows at least the public dashboard card details: type, status, version,
+revision, public HTTPS and container health, deployment time and update policy
+with its source. Health and overview values come from executor observations;
+failed refreshes mark status and health unknown. The private history remains here, never in the public application.
 Theme preferences are stored independently per origin, without sharing sessions.
 
 ## Security and authentication
@@ -186,7 +188,8 @@ Rejections show a fixed explanation only for exact allowlisted executor reasons
 (such as not enrolled or automation drift); unmatched reasons, other error codes
 and non-string messages fall back to the generic text.
 Job states are queued/running/succeeded/failed/interrupted. Unknown or stale
-health stays unknown; offline always displays unknown. Neither a pending job
+health stays unknown; offline always displays unknown health and maintenance
+status. An older executor without card details yields explicit unknowns. Neither a pending job
 nor a successful liveness request fabricates app health.
 
 Both self-app names and dashboard/control domains are protected. The UI offers

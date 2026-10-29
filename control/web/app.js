@@ -7,6 +7,12 @@ const actions = {
   pause: "Pause automatic updates", resume: "Resume automatic updates",
   update: "Update now", restart: "Restart HTTP services", rollback: "Rollback application image",
 };
+const labels = {
+  healthy: "Healthy", unhealthy: "Unhealthy", unknown: "Unknown",
+  running: "Running", degraded: "Degraded", "not-deployed": "Not deployed",
+  "recovery-required": "Recovery required", maintenance: "Maintenance (intentionally offline)",
+  enabled: "Automatic", paused: "Paused", manual: "Manual",
+};
 let session = null, pending = null, busy = false, loading = false;
 const selectedActions = new Map();
 let renderedApps = null;
@@ -115,8 +121,15 @@ function renderApps(apps) {
     detail(list, refreshDeferred ? "Last known health" : "Health", refreshFailed ? "unknown" : app.health);
     const profile = app.profile === "fullstack" ? "Fullstack" : app.profile === "frontend" ? "Frontend" : "Unknown";
     detail(list, "Type", `${profile} (${app.stateful ? "stateful" : "stateless"})`);
-    detail(list, "Release", app.version || app.revision || "Not deployed");
-    detail(list, "Automatic updates", app.automation);
+    detail(list, "Status", refreshFailed ? "Unknown (stale)" : labels[app.status]);
+    if (app.version) detail(list, "Version", app.version);
+    detail(list, "Revision", app.revision ? app.revision.slice(0, 12) : "Not available");
+    detail(list, "Public HTTPS", refreshFailed ? "Unknown" : labels[app.publicHealth]);
+    detail(list, "Container", refreshFailed ? "Unknown" : labels[app.containerHealth]);
+    detail(list, "Deployment", app.deployedAt ? new Date(app.deployedAt).toLocaleString("sv-SE") : "Not available");
+    const updates = app.automation === "enabled" && app.updateSource ?
+      `Automatic (${app.updateSource})` : labels[app.automation];
+    detail(list, "Automatic updates", `${updates}${refreshFailed || refreshDeferred ? " (last known)" : ""}`);
     card.append(list);
     if (app.recoveryRequired) card.append(node("p", "Recovery required: use the host recovery runbook.", "warning"));
     if (app.protected) {

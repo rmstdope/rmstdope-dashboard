@@ -74,6 +74,10 @@ try {
   const list = await api("apps");
   assert.equal(list.apps[0].revision, "a".repeat(40));
   assert.equal(list.apps[0].profile, "frontend");
+  assert.ok(["running", "degraded", "unknown"].includes(list.apps[0].status));
+  assert.ok(["healthy", "unhealthy", "unknown"].includes(list.apps[0].publicHealth));
+  assert.ok(["healthy", "unhealthy", "unknown"].includes(list.apps[0].containerHealth));
+  assert.ok(Number.isFinite(Date.parse(list.apps[0].deployedAt)));
   const { preview } = await api("preview", { app: "example", action: "pause" });
   assert.equal(typeof preview.expiresAt, "number");
   assert.equal(Number.isInteger(preview.expiresAt), false);

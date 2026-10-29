@@ -5,7 +5,8 @@ const upstream = process.env.CONTROL_TEST_URL || "http://127.0.0.1:18081";
 const app = {
   name: "example", url: "https://example.rmstdope.eu", profile: "fullstack", stateful: true,
   desired: "online", health: "unknown", revision: "a".repeat(40), version: "v1.2.3",
-  automation: "paused", recoveryRequired: false, protected: false,
+  automation: "paused", recoveryRequired: false, protected: false, status: "unknown",
+  publicHealth: "unknown", containerHealth: "unknown", deployedAt: null, updateSource: "merge",
 };
 const signedIn = { authenticated: true, actor: "123456", csrf: "test-csrf", recent: true };
 const job = {
@@ -217,6 +218,29 @@ test("filtering and searching preserve chosen actions without filtering overview
   await page.getByRole("button", { name: "Preview operation" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
   expect(previews.at(-1)).toEqual({ app: "example", action: "restart" });
+});
+
+test("application cards show the same details as the public dashboard", async ({ page }) => {
+  const deployedAt = "2026-10-29T10:44:53.000Z";
+  await setup(page, { apps: [{ ...app, health: "unhealthy", status: "degraded", publicHealth: "healthy",
+    containerHealth: "unhealthy", deployedAt, automation: "enabled", updateSource: "tag" }] });
+  const card = page.locator(".app-card").first();
+  const row = label => card.locator("dl > div").filter({ has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) }).locator("dd");
+  await expect(row("Type")).toHaveText("Fullstack (stateful)");
+  await expect(row("Status")).toHaveText("Degraded");
+  await expect(row("Version")).toHaveText("v1.2.3");
+  await expect(row("Revision")).toHaveText("a".repeat(12));
+  await expect(row("Public HTTPS")).toHaveText("Healthy");
+  await expect(row("Container")).toHaveText("Unhealthy");
+  await expect(row("Deployment")).toHaveText(await page.evaluate(value => new Date(value).toLocaleString("sv-SE"), deployedAt));
+  await expect(row("Automatic updates")).toHaveText("Automatic (tag)");
+  await expect(card.getByRole("link", { name: "example.rmstdope.eu" })).toHaveAttribute("target", "_blank");
+  await page.route("**/api/apps", route => route.fulfill({ status: 503, json: {} }));
+  await page.getByRole("button", { name: "Refresh", exact: true }).click();
+  await expect(row("Status")).toHaveText("Unknown (stale)");
+  await expect(row("Public HTTPS")).toHaveText("Unknown");
+  await expect(row("Container")).toHaveText("Unknown");
+  await expect(row("Automatic updates")).toHaveText("Automatic (tag) (last known)");
 });
 
 test("failed refresh makes overview health and application badges unknown", async ({ page }) => {
