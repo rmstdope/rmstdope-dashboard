@@ -8,7 +8,7 @@ import { spawnSync } from "node:child_process";
 import { configuration } from "../control/config.mjs";
 import { Store, IDLE, MAX_AGE, RECENT } from "../control/store.mjs";
 import { authenticate, authorizationURL } from "../control/oauth.mjs";
-import { createControlServer } from "../control/server.mjs";
+import { createControlServer, rejectionReasons } from "../control/server.mjs";
 import { execute, LIMIT, cleanApp, cleanJob, cleanPreview } from "../control/executor.mjs";
 
 let counter = 0;
@@ -376,6 +376,23 @@ test("executor errors are mapped to fixed messages, malformed and unsafe output 
   const result = await rejected.request("/api/apps");
   assert.equal(result.status, 409);
   assert.equal(result.text.includes("SECRET_TOKEN"), false);
+  assert.match(JSON.parse(result.text).error.message, /offline, protected or recovery-required/);
+  for (const [executorMessage, expected] of rejectionReasons) {
+    const reason = await (await fixture(t, { execute: async () => ({
+      error: { code: "rejected", message: executorMessage },
+    }) })).request("/api/apps");
+    assert.equal(reason.status, 409);
+    assert.deepEqual(JSON.parse(reason.text).error, { code: "rejected", message: expected });
+  }
+  const drift = rejectionReasons.get("Automation drift needs CLI reconciliation");
+  assert.match(drift, /definitions or installed tooling/);
+  for (const error of [{ code: "unavailable", message: "Automation drift needs CLI reconciliation" },
+    { code: "rejected", message: ["Automation drift needs CLI reconciliation"] }]) {
+    const generic = await (await fixture(t, { execute: async () => ({ error }) })).request("/api/apps");
+    assert.equal(JSON.parse(generic.text).error.message.includes(drift), false);
+  }
+  const inherited = await fixture(t, { execute: async () => ({ error: { code: "toString", message: "x" } }) });
+  assert.equal((await inherited.request("/api/apps")).status, 502);
   const malformed = await fixture(t, { execute: async () => ({ apps: [{ ...app, url: "javascript:alert(1)" }] }) });
   assert.equal((await malformed.request("/api/apps")).status, 503);
   assert.equal(cleanApp({ ...app, desired: "offline", health: "healthy" }).health, "unknown");
