@@ -85,7 +85,7 @@ const executorErrors = {
 // Exact executor rejection reasons mapped to fixed text; anything else stays generic.
 const rejectionReasons = new Map([
   ["Application is not enrolled", "Application is not enrolled for automatic updates. Enroll and baseline it with the CLI."],
-  ["Automation drift needs CLI reconciliation", "Deployed release, definitions or tooling differ from the automatic update baseline. Reconcile with the CLI before resuming."],
+  ["Automation drift needs CLI reconciliation", "Application definitions or installed tooling differ from the automatic update baseline. Reconcile with the CLI before resuming."],
   ["Interrupted attempt needs CLI recovery", "An interrupted automatic update needs CLI recovery."],
   ["Application is not in maintenance", "Application is not in maintenance."],
   ["Application is already up to date", "Application is already up to date."],

@@ -383,7 +383,7 @@ test("executor errors are mapped to fixed messages, malformed and unsafe output 
   const reason = await drift.request("/api/apps");
   assert.equal(reason.status, 409);
   assert.deepEqual(JSON.parse(reason.text).error, { code: "rejected",
-    message: "Deployed release, definitions or tooling differ from the automatic update baseline. Reconcile with the CLI before resuming." });
+    message: "Application definitions or installed tooling differ from the automatic update baseline. Reconcile with the CLI before resuming." });
   const inherited = await fixture(t, { execute: async () => ({ error: { code: "toString", message: "x" } }) });
   assert.equal((await inherited.request("/api/apps")).status, 502);
   const malformed = await fixture(t, { execute: async () => ({ apps: [{ ...app, url: "javascript:alert(1)" }] }) });
