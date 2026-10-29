@@ -396,6 +396,27 @@ test("executor errors are mapped to fixed messages, malformed and unsafe output 
   const malformed = await fixture(t, { execute: async () => ({ apps: [{ ...app, url: "javascript:alert(1)" }] }) });
   assert.equal((await malformed.request("/api/apps")).status, 503);
   assert.equal(cleanApp({ ...app, desired: "offline", health: "healthy" }).health, "unknown");
+  assert.deepEqual(Object.fromEntries(["status", "publicHealth", "containerHealth", "deployedAt", "updateSource"]
+    .map(key => [key, cleanApp(app)[key]])), {
+    status: "unknown", publicHealth: "unknown", containerHealth: "unknown", deployedAt: null, updateSource: null,
+  });
+  const detailed = { ...app, status: "degraded", publicHealth: "healthy", containerHealth: "unhealthy",
+    deployedAt: "2026-10-29T10:44:53.065514+00:00", updateSource: "tag" };
+  assert.deepEqual(Object.fromEntries(["status", "publicHealth", "containerHealth", "deployedAt", "updateSource"]
+    .map(key => [key, cleanApp(detailed)[key]])), {
+    status: "degraded", publicHealth: "healthy", containerHealth: "unhealthy",
+    deployedAt: "2026-10-29T10:44:53.065Z", updateSource: "tag",
+  });
+  const offline = cleanApp({ ...detailed, desired: "offline" });
+  assert.deepEqual([offline.status, offline.publicHealth, offline.containerHealth], ["maintenance", "unknown", "unknown"]);
+  assert.equal(cleanApp({ ...detailed, desired: "offline", status: "recovery-required" }).status, "recovery-required");
+  assert.equal(cleanApp({ ...detailed, desired: "offline", status: "not-deployed" }).status, "not-deployed");
+  assert.equal(cleanApp({ ...detailed, deployedAt: "2026-10-29T10:44:53Z" }).deployedAt, "2026-10-29T10:44:53.000Z");
+  for (const bad of [{ status: "fine" }, { publicHealth: "<b>" }, { containerHealth: 1 },
+    { deployedAt: "yesterday" }, { deployedAt: "x".repeat(41) }, { deployedAt: "2026-10-29T10:44:53" },
+    { updateSource: "branch" }]) {
+    assert.throws(() => cleanApp({ ...detailed, ...bad }), /Invalid executor app/);
+  }
   assert.throws(() => cleanJob({ id: jobId, app: "example", action: "shell" }));
 });
 

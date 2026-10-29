@@ -11,6 +11,12 @@ export const identifier = value => typeof value === "string" && /^[a-zA-Z0-9_-]{
 const revision = value => value === null || (typeof value === "string" && /^[a-f0-9]{7,64}$/.test(value));
 const version = value => value === null || (typeof value === "string" && /^v\d+\.\d+\.\d+$/.test(value));
 const statuses = ["queued", "running", "succeeded", "failed", "interrupted"];
+const healthStates = ["healthy", "unhealthy", "unknown"];
+const appStatuses = ["running", "degraded", "not-deployed", "recovery-required", "maintenance", "unknown"];
+// Card details are optional so an older executor still yields explicit unknowns.
+const optional = (value, valid) => value === undefined || value === null || valid(value);
+const deployedAt = value => typeof value === "string" && value.length <= 40 &&
+  /^\d{4}-\d{2}-\d{2}T[^Z+]*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const epoch = value => typeof value === "number" && Number.isFinite(value) &&
   value >= 0 && value <= Number.MAX_SAFE_INTEGER;
 const messages = {
@@ -36,7 +42,13 @@ export function cleanApp(app) {
       !["healthy", "unhealthy", "unknown"].includes(app.health) ||
       !revision(app.revision) || !version(app.version) ||
       typeof app.stateful !== "boolean" || typeof app.recoveryRequired !== "boolean" ||
-      typeof app.protected !== "boolean") throw new Error("Invalid executor app");
+      typeof app.protected !== "boolean" ||
+      !optional(app.publicHealth, value => healthStates.includes(value)) ||
+      !optional(app.containerHealth, value => healthStates.includes(value)) ||
+      !optional(app.status, value => appStatuses.includes(value)) ||
+      !optional(app.deployedAt, deployedAt) ||
+      !optional(app.updateSource, value => ["merge", "tag"].includes(value))) throw new Error("Invalid executor app");
+  const offline = app.desired === "offline";
   return {
     name: app.name, url: app.url,
     profile: app.profile === "static" ? "frontend" : app.profile === "frontend-api" ? "fullstack" :
@@ -46,7 +58,13 @@ export function cleanApp(app) {
     pauseReason: app.automation === "paused" ? "Automatic updates paused" : null,
     recoveryRequired: app.recoveryRequired, protected: app.protected || protectedName(app.name) ||
       ["https://dashboard.rmstdope.eu", "https://control.rmstdope.eu"].includes(app.url),
-    health: app.desired === "offline" ? "unknown" : app.health,
+    health: offline ? "unknown" : app.health,
+    publicHealth: offline ? "unknown" : app.publicHealth ?? "unknown",
+    containerHealth: offline ? "unknown" : app.containerHealth ?? "unknown",
+    status: offline && !["recovery-required", "not-deployed"].includes(app.status) ? "maintenance" :
+      app.status ?? "unknown",
+    deployedAt: app.deployedAt ? new Date(app.deployedAt).toISOString() : null,
+    updateSource: app.updateSource ?? null,
   };
 }
 export function cleanJob(job) {
