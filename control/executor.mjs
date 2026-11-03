@@ -12,9 +12,14 @@ const revision = value => value === null || (typeof value === "string" && /^[a-f
 const version = value => value === null || (typeof value === "string" && /^v\d+\.\d+\.\d+$/.test(value));
 const statuses = ["queued", "running", "succeeded", "failed", "interrupted"];
 const healthStates = ["healthy", "unhealthy", "unknown"];
+const appUrl = /^https:\/\/(?:[a-z][a-z0-9-]{0,39}\.)?rmstdope\.eu$/;
 const appStatuses = ["running", "degraded", "not-deployed", "recovery-required", "maintenance", "unknown"];
 // Card details are optional so an older executor still yields explicit unknowns.
 const optional = (value, valid) => value === undefined || value === null || valid(value);
+// Only headless workers lack a web address and a public HTTPS check.
+const validReach = app => app.profile === "worker" ?
+  app.url === null && optional(app.publicHealth, value => value === "n/a") :
+  text(app.url) && appUrl.test(app.url) && optional(app.publicHealth, value => healthStates.includes(value));
 const deployedAt = value => typeof value === "string" && value.length <= 40 &&
   /^\d{4}-\d{2}-\d{2}T[^Z+]*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const epoch = value => typeof value === "number" && Number.isFinite(value) &&
@@ -25,25 +30,23 @@ const messages = {
   interrupted: "Operation interrupted. Manual host recovery may be required.",
 };
 export const warnings = {
-  offline: "Stops application HTTP services and enables maintenance mode. The database stays running. Automatic updates remain paused.",
+  offline: "Stops application services and enables maintenance mode. The database stays running. Automatic updates remain paused.",
   online: "Starts the current release and checks health. Automatic updates remain paused.",
   pause: "Pauses automatic updates without stopping the application.",
   resume: "Enables automatic updates. An eligible newer release deploys on the next poll, replacing the current release; this may undo a rollback. The executor rejects offline or recovery-required applications.",
   update: "Deploys the previewed release and checks health. Automatic updates remain paused. Database migrations may be forward-only.",
-  restart: "Restarts application HTTP services, not the database. Automatic updates remain paused.",
+  restart: "Restarts application services, not the database. Automatic updates remain paused.",
   rollback: "Restores the previous application image only. The database is NOT rolled back: schema migrations may be incompatible. Automatic updates remain paused.",
 };
 
 export function cleanApp(app) {
-  if (!app || !appName(app.name) || !text(app.url) ||
-      !/^https:\/\/(?:[a-z][a-z0-9-]{0,39}\.)?rmstdope\.eu$/.test(app.url) ||
+  if (!app || !appName(app.name) || !validReach(app) ||
       !["online", "offline"].includes(app.desired) ||
       !["enabled", "paused", "manual"].includes(app.automation) ||
       !["healthy", "unhealthy", "unknown"].includes(app.health) ||
       !revision(app.revision) || !version(app.version) ||
       typeof app.stateful !== "boolean" || typeof app.recoveryRequired !== "boolean" ||
       typeof app.protected !== "boolean" ||
-      !optional(app.publicHealth, value => healthStates.includes(value)) ||
       !optional(app.containerHealth, value => healthStates.includes(value)) ||
       !optional(app.status, value => appStatuses.includes(value)) ||
       !optional(app.deployedAt, deployedAt) ||
@@ -52,14 +55,15 @@ export function cleanApp(app) {
   return {
     name: app.name, url: app.url,
     profile: app.profile === "static" ? "frontend" : app.profile === "frontend-api" ? "fullstack" :
-      ["frontend", "fullstack"].includes(app.profile) ? app.profile : "unknown",
+      ["frontend", "fullstack", "worker"].includes(app.profile) ? app.profile : "unknown",
     stateful: app.stateful, desired: app.desired, revision: app.revision,
     version: app.version, automation: app.automation,
     pauseReason: app.automation === "paused" ? "Automatic updates paused" : null,
     recoveryRequired: app.recoveryRequired, protected: app.protected || protectedName(app.name) ||
       ["https://dashboard.rmstdope.eu", "https://control.rmstdope.eu"].includes(app.url),
     health: offline ? "unknown" : app.health,
-    publicHealth: offline ? "unknown" : app.publicHealth ?? "unknown",
+    // A worker has no public check in any state, so offline cannot make it unknown.
+    publicHealth: app.profile === "worker" ? "n/a" : offline ? "unknown" : app.publicHealth ?? "unknown",
     containerHealth: offline ? "unknown" : app.containerHealth ?? "unknown",
     status: offline && !["recovery-required", "not-deployed"].includes(app.status) ? "maintenance" :
       app.status ?? "unknown",

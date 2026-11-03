@@ -532,3 +532,23 @@ test("apex-domain apps are accepted; look-alike domains are not", () => {
     assert.throws(() => cleanApp({ ...app, url }), url);
   }
 });
+
+test("workers carry no link or public check; other profiles may not omit them", () => {
+  const worker = { ...app, name: "oracle", url: null, profile: "worker", publicHealth: "n/a" };
+  const clean = cleanApp(worker);
+  assert.equal(clean.url, null);
+  assert.equal(clean.profile, "worker");
+  assert.equal(clean.publicHealth, "n/a");
+  assert.equal(clean.protected, false);
+  const offline = cleanApp({ ...worker, desired: "offline", health: "healthy" });
+  assert.equal(offline.publicHealth, "n/a");
+  assert.equal(offline.health, "unknown");
+  assert.equal(cleanApp({ ...worker, publicHealth: undefined }).publicHealth, "n/a");
+  for (const change of [{ url: "https://oracle.rmstdope.eu" }, { url: undefined }, { publicHealth: "healthy" },
+    { publicHealth: "unknown" }]) {
+    assert.throws(() => cleanApp({ ...worker, ...change }), JSON.stringify(change));
+  }
+  for (const change of [{ url: null }, { publicHealth: "n/a" }, { profile: "static", url: null }]) {
+    assert.throws(() => cleanApp({ ...app, ...change }), JSON.stringify(change));
+  }
+});

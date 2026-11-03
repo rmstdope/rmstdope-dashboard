@@ -5,6 +5,15 @@ const states = {
   automation: ["enabled", "paused", "manual"],
 };
 
+const appUrl = /^https:\/\/(?:[a-z][a-z0-9-]{0,39}\.)?rmstdope\.eu$/;
+
+// Headless workers have no web address and no public HTTPS check; nothing else may omit them.
+function validReach(app) {
+  return app.applicationType === "worker" ?
+    app.url === null && app.publicHealth === "n/a" :
+    typeof app.url === "string" && appUrl.test(app.url) && states.health.includes(app.publicHealth);
+}
+
 function timestamp(value) {
   return typeof value === "string" && Number.isFinite(Date.parse(value));
 }
@@ -17,15 +26,13 @@ export function validateSnapshot(data) {
   const names = new Set();
   for (const app of data.apps) {
     if (!app || typeof app.name !== "string" || !namePattern.test(app.name) ||
-        names.has(app.name) || typeof app.url !== "string" ||
-        !/^https:\/\/(?:[a-z][a-z0-9-]{0,39}\.)?rmstdope\.eu$/.test(app.url) ||
-        !states.health.includes(app.health) || !states.health.includes(app.publicHealth) ||
+        names.has(app.name) || !validReach(app) || !states.health.includes(app.health) ||
         !states.health.includes(app.containerHealth) || !states.status.includes(app.status) ||
         !states.automation.includes(app.automation) || typeof app.recoveryRequired !== "boolean" ||
         !(app.updateSource === undefined || app.updateSource === null ||
           ["merge", "tag"].includes(app.updateSource)) ||
         !(app.applicationType === undefined || app.applicationType === null ||
-          ["frontend", "fullstack"].includes(app.applicationType)) ||
+          ["frontend", "fullstack", "worker"].includes(app.applicationType)) ||
         !(app.stateful === undefined || app.stateful === null || typeof app.stateful === "boolean") ||
         !(app.revision === null || /^[a-f0-9]{12}$/.test(app.revision)) ||
         !(app.version === null || /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(app.version)) ||
@@ -48,7 +55,8 @@ export function displayHealth(app, stale) {
 
 export function applicationTypeLabel(app) {
   const type = app.applicationType === "frontend" ? "Frontend" :
-    app.applicationType === "fullstack" ? "Fullstack" : "Unknown";
+    app.applicationType === "fullstack" ? "Fullstack" :
+    app.applicationType === "worker" ? "Worker" : "Unknown";
   const persistence = app.stateful === true ? "stateful" :
     app.stateful === false ? "stateless" : "persistence unknown";
   return type === "Unknown" && app.stateful == null ? "Unknown" : `${type} (${persistence})`;

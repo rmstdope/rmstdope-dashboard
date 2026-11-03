@@ -12,7 +12,7 @@ privileged mounts to the public dashboard.
 
 Both applications use the **Precision** interface: a restrained graphite/mint
 palette, desktop workspace navigation, responsive application cards, search and
-Frontend/Fullstack filters. Summary values come from actual application data;
+Frontend/Fullstack/Worker filters. Summary values come from actual application data;
 filtering the cards does not change platform-wide counts. The public dashboard
 does not fabricate uptime charts or expose the private control operation history.
 
@@ -30,11 +30,18 @@ links open in a new tab with noopener/noreferrer.
 
 Each card includes a **Type** row, such as **Frontend (stateless)** or
 **Fullstack (stateful)**. The collector supplies optional `applicationType`
-(`frontend`/`fullstack`) and `stateful` (boolean) fields from registered metadata.
+(`frontend`/`fullstack`/`worker`) and `stateful` (boolean) fields from registered metadata.
 These are independent: a fullstack app can be stateless. Older feeds remain
 usable and show Unknown for missing classification, not an inferred type.
 The metadata needs an explicitly installed collector update in infrastructure;
 the frontend alone cannot determine whether an app stores server-side data.
+
+Headless **worker** apps (for example a chat bot) have no web address. Their feed
+entry has `"url": null` and `"publicHealth": "n/a"`, and their health comes from
+containers alone. Their cards show "Background worker · no web address", Public
+HTTPS "Not applicable" and no launch link. Only `worker` entries may omit a link
+or the public check; any other entry without them is rejected like any malformed
+entry.
 
 The host collector publishes an allowlisted schemaVersion=1 JSON snapshot every
 minute. The browser requests `/status.json` every 30 seconds; data older than

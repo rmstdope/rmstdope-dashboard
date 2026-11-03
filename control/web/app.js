@@ -5,13 +5,13 @@ const refreshFailureMessage = "Refresh failed. Displayed state may be stale. Ope
 const actions = {
   offline: "Take offline (maintenance)", online: "Bring online",
   pause: "Pause automatic updates", resume: "Resume automatic updates",
-  update: "Update now", restart: "Restart HTTP services", rollback: "Rollback application image",
+  update: "Update now", restart: "Restart services", rollback: "Rollback application image",
 };
 const labels = {
   healthy: "Healthy", unhealthy: "Unhealthy", unknown: "Unknown",
   running: "Running", degraded: "Degraded", "not-deployed": "Not deployed",
   "recovery-required": "Recovery required", maintenance: "Maintenance (intentionally offline)",
-  enabled: "Automatic", paused: "Paused", manual: "Manual",
+  enabled: "Automatic", paused: "Paused", manual: "Manual", "n/a": "Not applicable",
 };
 let session = null, pending = null, busy = false, loading = false;
 const selectedActions = new Map();
@@ -111,21 +111,26 @@ function renderApps(apps) {
     icon.setAttribute("aria-hidden", "true");
     heading.append(icon, node("h3", title(app.name)), node("span", status, `badge status-${status}`));
     card.append(heading);
-    const link = node("a", new URL(app.url).hostname);
-    link.href = app.url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    card.append(link);
+    if (app.url) {
+      const link = node("a", new URL(app.url).hostname);
+      link.href = app.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      card.append(link);
+    } else {
+      card.append(node("p", "Background worker · no web address", "hostname"));
+    }
     const list = node("dl");
     detail(list, "Desired state", app.desired === "offline" ? "Offline · maintenance" : "Online");
     detail(list, refreshDeferred ? "Last known health" : "Health", refreshFailed ? "Unknown" : labels[app.health]);
-    const profile = app.profile === "fullstack" ? "Fullstack" : app.profile === "frontend" ? "Frontend" : "Unknown";
+    const profile = app.profile === "fullstack" ? "Fullstack" : app.profile === "frontend" ? "Frontend" :
+      app.profile === "worker" ? "Worker" : "Unknown";
     detail(list, "Type", `${profile} (${app.stateful ? "stateful" : "stateless"})`);
     const known = value => refreshFailed ? "Unknown" : `${labels[value]}${refreshDeferred ? " (last known)" : ""}`;
     detail(list, "Status", refreshFailed ? "Unknown (stale)" : known(app.status));
     if (app.version) detail(list, "Version", app.version);
     detail(list, "Revision", app.revision ? app.revision.slice(0, 12) : "Not available");
-    detail(list, "Public HTTPS", known(app.publicHealth));
+    detail(list, "Public HTTPS", app.publicHealth === "n/a" ? labels["n/a"] : known(app.publicHealth));
     detail(list, "Container", known(app.containerHealth));
     detail(list, "Deployment", app.deployedAt ? new Date(app.deployedAt).toLocaleString("sv-SE") : "Not available");
     const updates = app.automation === "enabled" && app.updateSource ?

@@ -150,3 +150,53 @@ test("filters and search use real classifications without changing platform coun
   await page.getByRole("searchbox", { name: "Find an application" }).clear();
   await expect(page.locator(".card")).toHaveCount(2);
 });
+
+test("headless workers render without a launch link and filter as workers", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("**/status.json", route => route.fulfill({ json: feed([
+    { ...app, applicationType: "frontend", stateful: false },
+    { ...app, name: "atlantis-oracle", url: null, applicationType: "worker", stateful: true,
+      publicHealth: "n/a", automation: "paused" },
+  ]) }));
+  await page.goto("/");
+  await expect(page.locator("#health-value")).toHaveText("2 / 2");
+  await page.getByRole("button", { name: "Worker", exact: true }).click();
+  const card = page.locator(".card");
+  await expect(card).toHaveCount(1);
+  await expect(card.getByRole("heading", { name: "Atlantis Oracle" })).toBeVisible();
+  await expect(card.getByText("Background worker · no web address")).toBeVisible();
+  await expect(card.getByText("Worker (stateful)")).toBeVisible();
+  await expect(card.getByText("Not applicable")).toBeVisible();
+  await expect(card.getByRole("link")).toHaveCount(0);
+  await page.getByRole("searchbox", { name: "Find an application" }).fill("null");
+  await expect(page.locator("#empty")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("stale, maintenance and unknown workers never look healthy and keep no public check", async ({ page }) => {
+  const worker = { ...app, name: "atlantis-oracle", url: null, applicationType: "worker", stateful: true,
+    publicHealth: "n/a" };
+  const row = (card, label) => card.locator("dl > div").filter({
+    has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) }).locator("dd");
+  await page.route("**/status.json", route => route.fulfill({ json: feed([
+    { ...worker, status: "maintenance" },
+    { ...worker, name: "collect-failed", health: "unknown", containerHealth: "unknown", status: "unknown" },
+    { ...worker, name: "not-yet", health: "unknown", containerHealth: "unknown", status: "not-deployed",
+      revision: null },
+  ]) }));
+  await page.goto("/");
+  await expect(page.locator("#health-value")).toHaveText("0 / 3");
+  await expect(page.locator(".badge")).toHaveText(["Unknown", "Unknown", "Unknown"]);
+  for (const card of await page.locator(".card").all()) {
+    await expect(row(card, "Public HTTPS")).toHaveText("Not applicable");
+    await expect(card.getByRole("link")).toHaveCount(0);
+  }
+  await page.route("**/status.json", route => route.fulfill({
+    json: feed([worker], new Date(Date.now() - 181_000).toISOString()),
+  }));
+  await page.getByRole("button", { name: "Refresh status" }).click();
+  await expect(page.locator("#health-value")).toHaveText("Unknown");
+  await expect(page.locator(".badge")).toHaveText("Unknown");
+  await expect(row(page.locator(".card"), "Public HTTPS")).toHaveText("Not applicable");
+});

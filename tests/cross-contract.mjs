@@ -8,6 +8,7 @@ import { once } from "node:events";
 import { Store } from "../control/store.mjs";
 import { createControlServer, rejectionReasons } from "../control/server.mjs";
 import { execute } from "../control/executor.mjs";
+import { validateSnapshot } from "../web/model.js";
 
 const infra = process.env.INFRA_CHECKOUT;
 if (!infra || !fs.existsSync(path.join(infra, "src/rmstdope_deploy/control.py"))) {
@@ -78,6 +79,11 @@ try {
   assert.ok(["healthy", "unhealthy", "unknown"].includes(list.apps[0].publicHealth));
   assert.ok(["healthy", "unhealthy", "unknown"].includes(list.apps[0].containerHealth));
   assert.ok(Number.isFinite(Date.parse(list.apps[0].deployedAt)));
+  const headless = list.apps.find(entry => entry.name === "oracle");
+  assert.equal(headless.url, null);
+  assert.equal(headless.profile, "worker");
+  assert.equal(headless.publicHealth, "n/a");
+  assert.equal(headless.status, "not-deployed");
   const { preview } = await api("preview", { app: "example", action: "pause" });
   assert.equal(typeof preview.expiresAt, "number");
   assert.equal(Number.isInteger(preview.expiresAt), false);
@@ -98,12 +104,20 @@ try {
   const extra = await execute(path.join(dir, "s"), { operation: "list", actor: "123", command: "ignored" });
   assert.equal(extra.error.code, "rejected");
   await api("preview", { app: "example", action: "pause", actor: "999" }, 400);
+  const { snapshot } = await command("worker");
+  validateSnapshot(snapshot);
+  const feedWorker = snapshot.apps.find(entry => entry.name === "oracle");
+  assert.deepEqual([feedWorker.url, feedWorker.applicationType, feedWorker.publicHealth, feedWorker.health,
+    feedWorker.status], [null, "worker", "n/a", "healthy", "running"]);
+  const deployedWorker = (await api("apps")).apps.find(entry => entry.name === "oracle");
+  assert.deepEqual([deployedWorker.url, deployedWorker.publicHealth, deployedWorker.health,
+    deployedWorker.status], [null, "n/a", "healthy", "running"]);
   await command("offline");
   const offline = await api("apps");
   assert.equal(offline.apps[0].desired, "offline");
   assert.equal(offline.apps[0].revision, "a".repeat(12));
   assert.equal(offline.apps[0].health, "unknown");
-  console.log("PASS real Node API → Python Executor/Server: list, fractional preview/job timestamps, submit/idempotency, session actor audit, executed pause, job/history, rejection shape, spoof denial, offline short revision");
+  console.log("PASS real Node API → Python Executor/Server: list, fractional preview/job timestamps, submit/idempotency, session actor audit, executed pause, job/history, rejection shape, spoof denial, offline short revision, headless worker without link, real collector feed and deployed worker health");
 } finally {
   if (server) {
     server.closeAllConnections();

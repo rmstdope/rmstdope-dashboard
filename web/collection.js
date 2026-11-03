@@ -19,5 +19,5 @@ export function collection(onChange, category) {
   search.addEventListener("input", onChange);
   return apps => apps.filter(app =>
     (filter === "all" || category(app) === filter) &&
-    `${title(app.name)} ${app.name} ${app.url}`.toLowerCase().includes(search.value.trim().toLowerCase()));
+    `${title(app.name)} ${app.name} ${app.url ?? ""}`.toLowerCase().includes(search.value.trim().toLowerCase()));
 }

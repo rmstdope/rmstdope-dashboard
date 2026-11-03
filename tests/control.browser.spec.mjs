@@ -395,3 +395,28 @@ for (const previewFailure of [false, true]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("worker cards have no link, show not-applicable public health and keep operations", async ({ page }) => {
+  const { errors } = await setup(page, { apps: [app, { ...app, name: "atlantis-oracle", url: null,
+    profile: "worker", publicHealth: "n/a", health: "healthy", containerHealth: "healthy", status: "running" }] });
+  await page.getByRole("button", { name: "Worker", exact: true }).click();
+  const card = page.locator(".app-card");
+  await expect(card).toHaveCount(1);
+  const row = label => card.locator("dl > div").filter({ has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) }).locator("dd");
+  await expect(row("Type")).toHaveText("Worker (stateful)");
+  await expect(row("Public HTTPS")).toHaveText("Not applicable");
+  await expect(card.getByText("Background worker · no web address")).toBeVisible();
+  await expect(card.getByRole("link")).toHaveCount(0);
+  await expect(card.getByRole("combobox", { name: "Operation for atlantis-oracle" })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("offline workers stay unknown and never gain a public check or last-known suffix", async ({ page }) => {
+  await setup(page, { apps: [{ ...app, name: "atlantis-oracle", url: null, profile: "worker",
+    publicHealth: "n/a", desired: "offline", health: "unknown", status: "maintenance" }] });
+  const card = page.locator(".app-card");
+  const row = label => card.locator("dl > div").filter({ has: page.locator("dt", { hasText: new RegExp(`^${label}$`) }) }).locator("dd");
+  await expect(card.locator(".badge")).toHaveText("maintenance");
+  await expect(row("Public HTTPS")).toHaveText("Not applicable");
+  await expect(row("Health")).toHaveText("Unknown");
+});
