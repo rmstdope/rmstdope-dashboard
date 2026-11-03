@@ -307,9 +307,11 @@ export function createControlServer(config, dependencies = {}) {
       if (res.headersSent || res.destroyed) return;
       const known = error instanceof Failure;
       if (!known) {
-        // Internal reasons are fixed strings; the client still gets only the generic message.
-        const reason = String(error?.message ?? error).replace(/[^\x20-\x7e]/g, "?").slice(0, 160);
-        reportFailure(`${req.method} ${req.url.split("?")[0].slice(0, 80)}: ${reason}`);
+        // Operator log only (the client gets the generic message). Reasons are mostly fixed
+        // strings but may carry server paths; every logged value is printable ASCII and short.
+        const printable = (value, max) => String(value).replace(/[^\x20-\x7e]/g, "?").slice(0, max);
+        reportFailure(`${printable(req.method, 10)} ${printable(req.url.split("?")[0], 80)}: ` +
+          printable(error?.message ?? error, 160));
       }
       send(known ? error.status : 503, { error: {
         code: known ? error.code : "service_unavailable",

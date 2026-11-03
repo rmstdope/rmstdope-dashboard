@@ -385,6 +385,9 @@ test("an application list read during a host operation passes busy through and v
     assert.equal((await invalid.request("/api/apps")).status, 503);
     assert.deepEqual(invalid.failures, ["GET /api/apps: Invalid executor list"]);
   }
+  const unprintable = await fixture(t, { execute: async () => { throw new Error("bad\u00e9\u0007reason"); } });
+  await unprintable.request("/api/apps");
+  assert.deepEqual(unprintable.failures, ["GET /api/apps: bad??reason"]);
 });
 
 test("executor errors are mapped to fixed messages, malformed and unsafe output fails closed", async t => {

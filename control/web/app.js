@@ -286,7 +286,9 @@ async function refresh(showMessage = true) {
   } catch (error) {
     if (error.code === "busy" && error.path === "apps" && session) {
       refreshDeferred = true;
+      operationRunning = false;
       renderApps(latestApps);
+      if (historyFailed && !$("#message").textContent) message(historyFailureMessage);
       $("#updated").textContent = "Application refresh deferred while an infrastructure operation runs; retrying automatically.";
     } else {
       refreshFailed = true;
