@@ -362,6 +362,26 @@ test("a first load while an older executor is busy explains why no apps are show
   expect(errors).toEqual([]);
 });
 
+test("a history failure shown while apps are deferred clears when history recovers", async ({ page }) => {
+  await page.clock.install();
+  let appsBusy = false, historyDown = true;
+  const { errors } = await setup(page, {
+    jobs: () => [job],
+    override: path => (path === "/api/apps" && appsBusy && { status: 409, json: { error: { code: "busy" } } }) ||
+      (path === "/api/jobs" && historyDown && { status: 503, json: { error: { code: "service_unavailable" } } }),
+  });
+  await expect(page.locator("#message")).toContainText("Operation history refresh failed");
+  appsBusy = true;
+  await page.clock.runFor(5100);
+  await expect(page.locator("#updated")).toContainText("refresh deferred");
+  await expect(page.locator("#message")).toContainText("Operation history refresh failed");
+  historyDown = false;
+  await page.clock.runFor(5000);
+  await expect(page.locator("#jobs")).toContainText("example");
+  await expect(page.locator("#message")).toHaveText("");
+  expect(errors).toEqual([]);
+});
+
 test("a history failure keeps fresh apps and is shown until history recovers", async ({ page }) => {
   await page.clock.install();
   let unavailable = true;

@@ -288,7 +288,9 @@ async function refresh(showMessage = true) {
       refreshDeferred = true;
       operationRunning = false;
       renderApps(latestApps);
-      if (historyFailed && !$("#message").textContent) message(historyFailureMessage);
+      const shown = $("#message").textContent;
+      if (historyFailed && !shown) message(historyFailureMessage);
+      else if (!historyFailed && shown === historyFailureMessage) message("");
       $("#updated").textContent = "Application refresh deferred while an infrastructure operation runs; retrying automatically.";
     } else {
       refreshFailed = true;
