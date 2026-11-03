@@ -28,13 +28,15 @@ async function setup(page, options = {}) {
       return route.fulfill({ response });
     }
     const json = value => route.fulfill({ json: value });
+    const override = options.override?.(url.pathname);
+    if (override) return route.fulfill(override);
     if (url.pathname === "/api/session") return json(authenticated ? signedIn : { authenticated: false });
     if (url.pathname === "/api/logout") { authenticated = false; return json({ ok: true }); }
     if (url.pathname === "/api/apps") {
       appRequests++;
       return json({ apps: typeof options.apps === "function" ? options.apps() : options.apps || [app, {
         ...app, name: "control", protected: true,
-      }] });
+      }], ...(options.busy ? { busy: options.busy() } : {}) });
     }
     if (url.pathname === "/api/jobs") return json({ jobs: options.jobs ? options.jobs() : [] });
     if (url.pathname === "/api/preview") {
@@ -318,8 +320,67 @@ test("busy executor does not hide genuine refresh or history failures", async ({
   await expect(page.locator("#message")).toContainText("Refresh failed");
   await page.route("**/api/jobs", unavailable);
   await page.clock.runFor(5000);
-  await expect(page.locator("#updated")).toContainText("refresh failed");
+  await expect(page.locator("#jobs")).toContainText("Operation history refresh failed");
   await expect(page.locator("#message")).toContainText("Refresh failed");
+});
+
+test("apps read during a host operation are shown with unknown health, then recover", async ({ page }) => {
+  await page.clock.install();
+  let busy = true;
+  const { errors } = await setup(page, {
+    busy: () => busy,
+    apps: () => [busy ? app : { ...app, health: "healthy", status: "running" }],
+  });
+  const card = page.locator(".app-card");
+  await expect(card).toHaveCount(1);
+  await expect(page.locator("#health-value")).toHaveText("Unknown");
+  await expect(page.locator("#summary")).toContainText("operation in progress — health and status are unknown");
+  await expect(page.locator("#updated")).toContainText("infrastructure operation in progress");
+  await expect(card.locator(".status-healthy")).toHaveCount(0);
+  busy = false;
+  await page.clock.runFor(5100);
+  await expect(page.locator("#health-value")).toHaveText("1 / 1");
+  await expect(page.locator("#updated")).not.toContainText("operation in progress");
+  await expect(card.locator(".status-healthy")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("a first load while an older executor is busy explains why no apps are shown", async ({ page }) => {
+  await page.clock.install();
+  let lockBusy = true;
+  const { errors } = await setup(page, {
+    jobs: () => [job],
+    override: path => lockBusy && path === "/api/apps" && { status: 409, json: { error: { code: "busy" } } },
+  });
+  await expect(page.locator("#apps")).toContainText("appear when the running infrastructure operation finishes");
+  await expect(page.locator("#summary")).toContainText("applications appear when it finishes");
+  await expect(page.locator("#health-value")).toHaveText("Unknown");
+  await expect(page.locator("#jobs")).toContainText("example");
+  lockBusy = false;
+  await page.clock.runFor(5100);
+  await expect(page.locator(".app-card")).toHaveCount(2);
+  expect(errors).toEqual([]);
+});
+
+test("a history failure keeps fresh apps and is shown until history recovers", async ({ page }) => {
+  await page.clock.install();
+  let unavailable = true;
+  const { errors } = await setup(page, {
+    apps: [{ ...app, health: "healthy" }], jobs: () => [job],
+    override: path => unavailable && path === "/api/jobs" &&
+      { status: 503, json: { error: { code: "service_unavailable" } } },
+  });
+  await expect(page.locator(".app-card")).toHaveCount(1);
+  await expect(page.locator("#health-value")).toHaveText("1 / 1");
+  await expect(page.locator("#updated")).toHaveText(/^Last refreshed /);
+  await expect(page.locator("#jobs")).toContainText("Operation history refresh failed");
+  await expect(page.locator("#message")).toContainText("Operation history refresh failed");
+  unavailable = false;
+  await page.clock.runFor(5100);
+  await expect(page.locator("#jobs")).not.toContainText("refresh failed");
+  await expect(page.locator("#jobs")).toContainText("example");
+  await expect(page.locator("#message")).toHaveText("");
+  expect(errors).toEqual([]);
 });
 
 test("scheduled refresh clears a recovered failure without clearing operation feedback", async ({ page }) => {

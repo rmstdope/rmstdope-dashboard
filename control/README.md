@@ -11,7 +11,15 @@ per-application operation choices across filtering and refreshes. Each card
 shows at least the public dashboard card details: type, status, version,
 revision, public HTTPS and container health, deployment time and update policy
 with its source. Health and overview values come from executor observations;
-failed refreshes mark status and health unknown. The private history remains here, never in the public application.
+failed refreshes mark status and health unknown. While a host operation holds
+the infrastructure lock (a poll, or minutes while a worker starts), the executor
+still lists the apps with `"busy": true`; the panel shows them with health and
+status unknown and labels the operation in progress. An older executor answers
+busy instead: the panel keeps last-known state, or explains on a first load that
+apps appear when the operation finishes. History refreshes independently: a
+history failure is shown in the history list and never hides fresh apps. The API
+logs the internal reason for a generic 503 to its container log, never to
+clients. The private history remains here, never in the public application.
 Theme preferences are stored independently per origin, without sharing sessions.
 
 ## Security and authentication
