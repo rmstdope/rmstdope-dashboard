@@ -78,6 +78,11 @@ try {
   assert.ok(["healthy", "unhealthy", "unknown"].includes(list.apps[0].publicHealth));
   assert.ok(["healthy", "unhealthy", "unknown"].includes(list.apps[0].containerHealth));
   assert.ok(Number.isFinite(Date.parse(list.apps[0].deployedAt)));
+  const headless = list.apps.find(entry => entry.name === "oracle");
+  assert.equal(headless.url, null);
+  assert.equal(headless.profile, "worker");
+  assert.equal(headless.publicHealth, "n/a");
+  assert.equal(headless.status, "not-deployed");
   const { preview } = await api("preview", { app: "example", action: "pause" });
   assert.equal(typeof preview.expiresAt, "number");
   assert.equal(Number.isInteger(preview.expiresAt), false);
@@ -103,7 +108,7 @@ try {
   assert.equal(offline.apps[0].desired, "offline");
   assert.equal(offline.apps[0].revision, "a".repeat(12));
   assert.equal(offline.apps[0].health, "unknown");
-  console.log("PASS real Node API → Python Executor/Server: list, fractional preview/job timestamps, submit/idempotency, session actor audit, executed pause, job/history, rejection shape, spoof denial, offline short revision");
+  console.log("PASS real Node API → Python Executor/Server: list, fractional preview/job timestamps, submit/idempotency, session actor audit, executed pause, job/history, rejection shape, spoof denial, offline short revision, headless worker without link");
 } finally {
   if (server) {
     server.closeAllConnections();

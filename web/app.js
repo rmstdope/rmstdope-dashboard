@@ -9,6 +9,7 @@ const labels = {
   running: "Running", degraded: "Degraded", "not-deployed": "Not deployed",
   "recovery-required": "Recovery required", enabled: "Automatic",
   paused: "Paused", manual: "Manual", maintenance: "Maintenance (intentionally offline)",
+  "n/a": "Not applicable",
 };
 const apps = document.querySelector("#apps");
 const summary = document.querySelector("#summary");
@@ -70,7 +71,7 @@ function render() {
     icon.setAttribute("aria-hidden", "true");
     top.append(icon, element("h2", "", title(app.name)), badge);
     card.append(top,
-      element("p", "hostname", new URL(app.url).hostname));
+      element("p", "hostname", app.url ? new URL(app.url).hostname : "Background worker · no web address"));
     if (app.recoveryRequired) card.append(element("p", "warning", "Recovery required"));
     const details = element("dl");
     detail(details, "Type", applicationTypeLabel(app));
@@ -83,12 +84,15 @@ function render() {
     const updates = app.automation === "enabled" && app.updateSource ?
       `Automatic (${app.updateSource})` : labels[app.automation];
     detail(details, "Updates", `${updates}${stale ? " (last known)" : ""}`);
-    const link = element("a", "launch button", "Launch application ↗");
-    link.href = app.url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.setAttribute("aria-label", `Launch ${title(app.name)} (new tab)`);
-    card.append(details, link);
+    card.append(details);
+    if (app.url) {
+      const link = element("a", "launch button", "Launch application ↗");
+      link.href = app.url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.setAttribute("aria-label", `Launch ${title(app.name)} (new tab)`);
+      card.append(link);
+    }
     apps.append(card);
   }
 }

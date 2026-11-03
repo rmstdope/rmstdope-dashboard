@@ -8,8 +8,10 @@ import threading
 infra = Path(sys.argv[1]).resolve()
 repo = Path(sys.argv[2]).resolve()
 sys.path[:0] = [str(infra / "src"), str(infra / "tests")]
-from rmstdope_deploy import config, control, poller, worker
+from unittest.mock import patch
+from rmstdope_deploy import config, control, poller, registry, worker
 from test_deploy import application
+from test_worker import headless
 
 root = repo / "host"
 (root / "infrastructure/config/routes").mkdir(parents=True)
@@ -40,6 +42,10 @@ worker.save_json(release_dir / "manifest.json", manifest)
 worker.save_json(host.app_root("example") / "state.json", {"current": release, "previous": None})
 with redirect_stdout(sys.stderr):
     poller.baseline(settings, app)
+# A registered, not yet deployed headless worker: no domain, route or public check.
+worker_app, worker_files = headless()
+with patch.object(worker.Host, "validate_compose"):
+    registry.register(repo, root, worker_app, worker_files)
 executor = control.Executor(config_path, repo / "jobs.sqlite", ["123"])
 with control.Server(str(repo / "s"), control.Handler) as server:
     server.executor = executor

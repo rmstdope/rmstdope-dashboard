@@ -150,3 +150,26 @@ test("filters and search use real classifications without changing platform coun
   await page.getByRole("searchbox", { name: "Find an application" }).clear();
   await expect(page.locator(".card")).toHaveCount(2);
 });
+
+test("headless workers render without a launch link and filter as workers", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.route("**/status.json", route => route.fulfill({ json: feed([
+    { ...app, applicationType: "frontend", stateful: false },
+    { ...app, name: "atlantis-oracle", url: null, applicationType: "worker", stateful: true,
+      publicHealth: "n/a", automation: "paused" },
+  ]) }));
+  await page.goto("/");
+  await expect(page.locator("#health-value")).toHaveText("2 / 2");
+  await page.getByRole("button", { name: "Worker", exact: true }).click();
+  const card = page.locator(".card");
+  await expect(card).toHaveCount(1);
+  await expect(card.getByRole("heading", { name: "Atlantis Oracle" })).toBeVisible();
+  await expect(card.getByText("Background worker · no web address")).toBeVisible();
+  await expect(card.getByText("Worker (stateful)")).toBeVisible();
+  await expect(card.getByText("Not applicable")).toBeVisible();
+  await expect(card.getByRole("link")).toHaveCount(0);
+  await page.getByRole("searchbox", { name: "Find an application" }).fill("null");
+  await expect(page.locator("#empty")).toBeVisible();
+  expect(errors).toEqual([]);
+});
