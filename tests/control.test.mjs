@@ -35,7 +35,7 @@ async function fixture(t, overrides = {}) {
     socket: "/unused", storeDir: path.dirname(store.file),
     trustedProxyIPs: new Set(overrides.trustedProxyIPs || []),
   };
-  const calls = [];
+  const calls = [], failures = [];
   const executor = async request => {
     calls.push(request);
     if (overrides.execute) return overrides.execute(request);
@@ -55,6 +55,7 @@ async function fixture(t, overrides = {}) {
     store, now, execute: executor,
     authenticate: overrides.authenticate || (async () => actor),
     reportOAuthFailure: overrides.reportOAuthFailure || (() => {}),
+    reportFailure: reason => failures.push(reason),
   });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => {
@@ -88,7 +89,7 @@ async function fixture(t, overrides = {}) {
       req.end(data);
     });
   }
-  return { request, store, id, session, calls, config, now, advance: ms => { time += ms; } };
+  return { request, store, id, session, calls, failures, config, now, advance: ms => { time += ms; } };
 }
 
 test("callback diagnostics contain fixed categories, never codes or cookie values", async t => {
@@ -367,6 +368,26 @@ test("output is allowlisted, no raw errors leak, logout revokes and assets have 
   const error = await broken.request("/api/apps");
   assert.equal(error.status, 503);
   assert.equal(error.text.includes("SECRET_TOKEN"), false);
+  // The operator log keeps the internal reason that the client never sees.
+  assert.deepEqual(broken.failures, ["GET /api/apps: SECRET_TOKEN /private/path"]);
+});
+
+test("an application list read during a host operation passes busy through and validates it", async t => {
+  const idle = await fixture(t);
+  assert.equal((await idle.request("/api/apps")).json.busy, false);
+  const busy = await fixture(t, { execute: async () => ({ apps: [app], busy: true }) });
+  const result = await busy.request("/api/apps");
+  assert.equal(result.status, 200);
+  assert.equal(result.json.busy, true);
+  assert.equal(result.json.apps[0].name, app.name);
+  for (const value of ["yes", 1, null]) {
+    const invalid = await fixture(t, { execute: async () => ({ apps: [app], busy: value }) });
+    assert.equal((await invalid.request("/api/apps")).status, 503);
+    assert.deepEqual(invalid.failures, ["GET /api/apps: Invalid executor list"]);
+  }
+  const unprintable = await fixture(t, { execute: async () => { throw new Error("bad\u00e9\u0007reason"); } });
+  await unprintable.request("/api/apps");
+  assert.deepEqual(unprintable.failures, ["GET /api/apps: bad??reason"]);
 });
 
 test("executor errors are mapped to fixed messages, malformed and unsafe output fails closed", async t => {

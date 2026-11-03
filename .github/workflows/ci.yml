@@ -196,7 +196,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: rmstdope/rmstdope-infra
-          ref: c12eafd6a88c5e3d76c21501f200b6695efb3148
+          ref: 7a5e36f730d69efe84620469d8493e6f5a8a7e4d
           path: .ci-infra
           token: ${{ env.INFRA_READ_TOKEN }}
           persist-credentials: false

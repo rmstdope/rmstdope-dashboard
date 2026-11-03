@@ -2,6 +2,7 @@ import { collection, title } from "/collection.js";
 
 const $ = selector => document.querySelector(selector);
 const refreshFailureMessage = "Refresh failed. Displayed state may be stale. Operations require a new executor preview.";
+const historyFailureMessage = "Operation history refresh failed. It may be stale and retries automatically.";
 const actions = {
   offline: "Take offline (maintenance)", online: "Bring online",
   pause: "Pause automatic updates", resume: "Resume automatic updates",
@@ -19,6 +20,9 @@ let renderedApps = null;
 let latestApps = [];
 let refreshFailed = false;
 let refreshDeferred = false;
+// The executor read the apps without its lock: health and status may be changing.
+let operationRunning = false;
+let historyFailed = false;
 const visibleApps = collection(() => renderApps(latestApps), app => app.profile);
 function node(tag, value, className) {
   const result = document.createElement(tag);
@@ -87,16 +91,18 @@ function renderApps(apps) {
   const healthy = apps.filter(app => app.desired === "online" && app.health === "healthy").length;
   const offline = apps.filter(app => app.desired === "offline").length;
   const paused = apps.filter(app => app.automation === "paused").length;
-  $("#health-value").textContent = refreshFailed || (refreshDeferred && !apps.length)
+  $("#health-value").textContent = refreshFailed || operationRunning || (refreshDeferred && !apps.length)
     ? "Unknown" : `${healthy} / ${apps.length}`;
   $("#automation-value").textContent = apps.filter(app => app.automation === "enabled").length;
   $("#maintenance-value").textContent = offline;
   $("#summary").textContent = refreshFailed ? "Status unknown — displayed application details may be stale" :
-    refreshDeferred ? "Infrastructure operation in progress — showing last known application state" :
+    refreshDeferred ? (apps.length ? "Infrastructure operation in progress — showing last known application state" :
+      "Infrastructure operation in progress — applications appear when it finishes") :
+    operationRunning ? "Infrastructure operation in progress — health and status are unknown until it finishes" :
     `${healthy} of ${apps.length} applications healthy · ${offline} offline · ${paused} with updates paused`;
   const visible = visibleApps(apps);
   $("#empty").hidden = !apps.length || visible.length > 0;
-  const snapshot = JSON.stringify([visible, refreshFailed, refreshDeferred, busy]);
+  const snapshot = JSON.stringify([visible, refreshFailed, refreshDeferred, operationRunning, busy]);
   if (snapshot === renderedApps) return;
   renderedApps = snapshot;
   for (const name of selectedActions.keys()) {
@@ -192,9 +198,21 @@ function renderApps(apps) {
     }
     $("#apps").append(card);
   }
-  if (!apps.length) $("#apps").append(node("p", "No registered applications."));
+  if (!apps.length) {
+    $("#apps").append(node("p", refreshFailed ? "Applications unavailable — refresh failed." :
+      refreshDeferred ? "Applications appear when the running infrastructure operation finishes." :
+      "No registered applications."));
+  }
+}
+function historyUnavailable() {
+  historyFailed = true;
+  $("#jobs .history-failure")?.remove();
+  const item = node("li", "Operation history refresh failed; it may be stale. Retrying automatically.", "empty-state history-failure");
+  item.setAttribute("role", "status");
+  $("#jobs").prepend(item);
 }
 function renderJobs(jobs) {
+  historyFailed = false;
   $("#jobs").replaceChildren();
   for (const job of jobs) {
     const item = node("li", undefined, "job");
@@ -250,23 +268,34 @@ async function refresh(showMessage = true) {
     account(value);
     if (session) {
       const [applications, history] = await Promise.allSettled([api("apps"), api("jobs")]);
-      if (history.status === "rejected") throw history.reason;
-      renderJobs(history.value.jobs);
+      if (!session) return;
+      // History and applications fail independently: one must not hide the other.
+      if (history.status === "fulfilled") renderJobs(history.value.jobs); else historyUnavailable();
       if (applications.status === "rejected") throw applications.reason;
       refreshFailed = false;
       refreshDeferred = false;
+      operationRunning = applications.value.busy === true;
       renderApps(applications.value.apps);
-      $("#updated").textContent = `Last refreshed ${new Date().toLocaleString("sv-SE")}`;
-      if (showMessage || $("#message").textContent === refreshFailureMessage) message("");
+      $("#updated").textContent = `Last refreshed ${new Date().toLocaleString("sv-SE")}` +
+        (operationRunning ? " · infrastructure operation in progress" : "");
+      const shown = $("#message").textContent;
+      if (showMessage || !shown || [refreshFailureMessage, historyFailureMessage].includes(shown)) {
+        message(historyFailed ? historyFailureMessage : "");
+      }
     }
   } catch (error) {
     if (error.code === "busy" && error.path === "apps" && session) {
       refreshDeferred = true;
+      operationRunning = false;
       renderApps(latestApps);
+      const shown = $("#message").textContent;
+      if (historyFailed && !shown) message(historyFailureMessage);
+      else if (!historyFailed && shown === historyFailureMessage) message("");
       $("#updated").textContent = "Application refresh deferred while an infrastructure operation runs; retrying automatically.";
     } else {
       refreshFailed = true;
       refreshDeferred = false;
+      operationRunning = false;
       if (session) renderApps(latestApps);
       message(refreshFailureMessage);
       $("#updated").textContent = "State unknown — refresh failed";

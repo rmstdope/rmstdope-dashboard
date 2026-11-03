@@ -105,6 +105,8 @@ export function createControlServer(config, dependencies = {}) {
   const store = dependencies.store || new Store(config.storeDir, now);
   const executor = dependencies.execute || (request => execute(config.socket, request));
   const oauth = dependencies.authenticate || ((code, verifier) => authenticate(config, code, verifier));
+  const reportFailure = dependencies.reportFailure ||
+    (reason => console.warn(`Control request unavailable: ${reason}`));
   const reportOAuthFailure = dependencies.reportOAuthFailure ||
     (reason => console.warn(`OAuth callback rejected: ${reason}`));
   const staticAssets = new Map([...assets].map(([route, [name, type]]) => [
@@ -282,8 +284,10 @@ export function createControlServer(config, dependencies = {}) {
       } else {
         if (url.pathname === "/api/apps") {
           const result = await call({ operation: "list", actor: session.actor });
-          if (!Array.isArray(result.apps) || result.apps.length > 100) throw new Error("Invalid executor list");
-          return send(200, { apps: result.apps.map(cleanApp) });
+          if (!Array.isArray(result.apps) || result.apps.length > 100 ||
+              !(result.busy === undefined || typeof result.busy === "boolean")) throw new Error("Invalid executor list");
+          // busy: read without the host lock while an operation runs; health is unknown.
+          return send(200, { apps: result.apps.map(cleanApp), busy: result.busy === true });
         }
         if (url.pathname === "/api/jobs") {
           const result = await call({ operation: "jobs", actor: session.actor });
@@ -302,6 +306,13 @@ export function createControlServer(config, dependencies = {}) {
     } catch (error) {
       if (res.headersSent || res.destroyed) return;
       const known = error instanceof Failure;
+      if (!known) {
+        // Operator log only (the client gets the generic message). Reasons are mostly fixed
+        // strings but may carry server paths; every logged value is printable ASCII and short.
+        const printable = (value, max) => String(value).replace(/[^\x20-\x7e]/g, "?").slice(0, max);
+        reportFailure(`${printable(req.method, 10)} ${printable(req.url.split("?")[0], 80)}: ` +
+          printable(error?.message ?? error, 160));
+      }
       send(known ? error.status : 503, { error: {
         code: known ? error.code : "service_unavailable",
         message: known ? error.message : "Control service is temporarily unavailable.",
