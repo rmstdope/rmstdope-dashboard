@@ -13,13 +13,13 @@ const version = value => value === null || (typeof value === "string" && /^v\d+\
 const statuses = ["queued", "running", "succeeded", "failed", "interrupted"];
 const healthStates = ["healthy", "unhealthy", "unknown"];
 const appUrl = /^https:\/\/(?:[a-z][a-z0-9-]{0,39}\.)?rmstdope\.eu$/;
-// Only headless workers lack a web address and a public HTTPS check.
-const validReach = app => app.profile === "worker" ?
-  app.url === null && optional(app.publicHealth, value => ["n/a", "unknown"].includes(value)) :
-  text(app.url) && appUrl.test(app.url) && optional(app.publicHealth, value => healthStates.includes(value));
 const appStatuses = ["running", "degraded", "not-deployed", "recovery-required", "maintenance", "unknown"];
 // Card details are optional so an older executor still yields explicit unknowns.
 const optional = (value, valid) => value === undefined || value === null || valid(value);
+// Only headless workers lack a web address and a public HTTPS check.
+const validReach = app => app.profile === "worker" ?
+  app.url === null && optional(app.publicHealth, value => value === "n/a") :
+  text(app.url) && appUrl.test(app.url) && optional(app.publicHealth, value => healthStates.includes(value));
 const deployedAt = value => typeof value === "string" && value.length <= 40 &&
   /^\d{4}-\d{2}-\d{2}T[^Z+]*(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value));
 const epoch = value => typeof value === "number" && Number.isFinite(value) &&
@@ -62,7 +62,8 @@ export function cleanApp(app) {
     recoveryRequired: app.recoveryRequired, protected: app.protected || protectedName(app.name) ||
       ["https://dashboard.rmstdope.eu", "https://control.rmstdope.eu"].includes(app.url),
     health: offline ? "unknown" : app.health,
-    publicHealth: offline ? "unknown" : app.publicHealth ?? "unknown",
+    // A worker has no public check in any state, so offline cannot make it unknown.
+    publicHealth: app.profile === "worker" ? "n/a" : offline ? "unknown" : app.publicHealth ?? "unknown",
     containerHealth: offline ? "unknown" : app.containerHealth ?? "unknown",
     status: offline && !["recovery-required", "not-deployed"].includes(app.status) ? "maintenance" :
       app.status ?? "unknown",

@@ -10,7 +10,7 @@ const appUrl = /^https:\/\/(?:[a-z][a-z0-9-]{0,39}\.)?rmstdope\.eu$/;
 // Headless workers have no web address and no public HTTPS check; nothing else may omit them.
 function validReach(app) {
   return app.applicationType === "worker" ?
-    app.url === null && ["n/a", "unknown"].includes(app.publicHealth) :
+    app.url === null && app.publicHealth === "n/a" :
     typeof app.url === "string" && appUrl.test(app.url) && states.health.includes(app.publicHealth);
 }
 

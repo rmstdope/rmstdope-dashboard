@@ -78,7 +78,8 @@ function render() {
     detail(details, "Status", stale ? "Unknown (stale)" : labels[app.status]);
     if (app.version) detail(details, "Version", app.version);
     detail(details, "Revision", app.revision || "Not available");
-    detail(details, "Public HTTPS", stale || app.status === "maintenance" ? "Unknown" : labels[app.publicHealth]);
+    detail(details, "Public HTTPS", app.publicHealth === "n/a" ? labels["n/a"] :
+      stale || app.status === "maintenance" ? "Unknown" : labels[app.publicHealth]);
     detail(details, "Container", stale || app.status === "maintenance" ? "Unknown" : labels[app.containerHealth]);
     detail(details, "Deployment", app.deployedAt ? new Date(app.deployedAt).toLocaleString("sv-SE") : "Not available");
     const updates = app.automation === "enabled" && app.updateSource ?

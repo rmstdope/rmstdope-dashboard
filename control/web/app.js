@@ -130,7 +130,7 @@ function renderApps(apps) {
     detail(list, "Status", refreshFailed ? "Unknown (stale)" : known(app.status));
     if (app.version) detail(list, "Version", app.version);
     detail(list, "Revision", app.revision ? app.revision.slice(0, 12) : "Not available");
-    detail(list, "Public HTTPS", known(app.publicHealth));
+    detail(list, "Public HTTPS", app.publicHealth === "n/a" ? labels["n/a"] : known(app.publicHealth));
     detail(list, "Container", known(app.containerHealth));
     detail(list, "Deployment", app.deployedAt ? new Date(app.deployedAt).toLocaleString("sv-SE") : "Not available");
     const updates = app.automation === "enabled" && app.updateSource ?

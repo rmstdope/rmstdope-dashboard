@@ -84,11 +84,11 @@ test("validates classification without equating fullstack with stateful", () => 
 test("headless workers have no link or public check, and only workers may omit them", () => {
   const worker = { ...app, name: "oracle", url: null, applicationType: "worker", stateful: true,
     publicHealth: "n/a" };
-  validateSnapshot({ ...snapshot, apps: [app, worker, { ...worker, name: "idle", publicHealth: "unknown" }] });
+  validateSnapshot({ ...snapshot, apps: [app, worker] });
   assert.equal(applicationTypeLabel(worker), "Worker (stateful)");
   for (const change of [
     { url: "https://oracle.rmstdope.eu" }, { url: undefined }, { url: "" },
-    { publicHealth: "healthy" }, { publicHealth: undefined },
+    { publicHealth: "healthy" }, { publicHealth: "unknown" }, { publicHealth: undefined },
     { applicationType: "frontend" }, { applicationType: undefined },
   ]) assert.throws(() => validateSnapshot({ ...snapshot, apps: [{ ...worker, ...change }] }));
   for (const change of [{ url: null }, { publicHealth: "n/a" }, { url: null, publicHealth: "n/a" }]) {

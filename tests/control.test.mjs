@@ -540,8 +540,12 @@ test("workers carry no link or public check; other profiles may not omit them", 
   assert.equal(clean.profile, "worker");
   assert.equal(clean.publicHealth, "n/a");
   assert.equal(clean.protected, false);
-  assert.equal(cleanApp({ ...worker, desired: "offline" }).publicHealth, "unknown");
-  for (const change of [{ url: "https://oracle.rmstdope.eu" }, { url: undefined }, { publicHealth: "healthy" }]) {
+  const offline = cleanApp({ ...worker, desired: "offline", health: "healthy" });
+  assert.equal(offline.publicHealth, "n/a");
+  assert.equal(offline.health, "unknown");
+  assert.equal(cleanApp({ ...worker, publicHealth: undefined }).publicHealth, "n/a");
+  for (const change of [{ url: "https://oracle.rmstdope.eu" }, { url: undefined }, { publicHealth: "healthy" },
+    { publicHealth: "unknown" }]) {
     assert.throws(() => cleanApp({ ...worker, ...change }), JSON.stringify(change));
   }
   for (const change of [{ url: null }, { publicHealth: "n/a" }, { profile: "static", url: null }]) {
