@@ -7,8 +7,8 @@ import { configuration } from "./config.mjs";
 import { Store, RECENT } from "./store.mjs";
 import { authorizationURL, authenticate, ISSUER } from "./oauth.mjs";
 import {
-  execute, ACTIONS, FRESH_ACTIONS, protectedName, appName,
-  cleanApp, cleanJob, cleanPreview,
+  execute, ACTIONS, FRESH_ACTIONS, protectedName, appName, releaseId,
+  cleanApp, cleanJob, cleanPreview, cleanReleases,
 } from "./executor.mjs";
 
 const SESSION = "__Host-control-session", OAUTH = "__Host-control-oauth";
@@ -98,7 +98,28 @@ export const rejectionReasons = new Map([
   ["Job not found", "Job not found."],
   ["Invalid job ID", "Job not found."],
   ["Administrator is not authorized", "This account is not authorized by the executor."],
+  ["Only a rollback takes these options", "Only a rollback takes these options."],
+  ["Invalid rollback target", "That release cannot be a rollback target."],
+  ["Rollback options must be true or false", "Invalid rollback options."],
+  ["No pre-release backup is configured for this application", "No pre-release backup is configured for this application."],
 ]);
+// Executor rejections that name a release or service, mapped to fixed text by shape.
+export const rejectionPatterns = [
+  [/^No restorable snapshot of \d{8}T\d{6}-[a-f0-9]{8} \(/, "That release has no snapshot that can be restored. Refresh the release history."],
+  [/^\d{8}T\d{6}-[a-f0-9]{8} is already running$/, "That release is already running."],
+  [/^Release \d{8}T\d{6}-[a-f0-9]{8} is not stored on this host$/, "That release is no longer stored. Refresh the release history."],
+  [/^Release \d{8}T\d{6}-[a-f0-9]{8} did not complete successfully$/, "Only successful releases can be rollback targets."],
+  [/^Release \d{8}T\d{6}-[a-f0-9]{8} is incomplete on this host$/, "That release is incomplete on the host. Use the CLI."],
+  [/^Release \d{8}T\d{6}-[a-f0-9]{8} has no [a-z][a-z0-9-]{0,39} service$/, "That release lacks the service its restore needs. Use the CLI runbook."],
+  [/^[a-z][a-z0-9-]{0,39} stops while the application is offline; /, "Its data service stops while the application is offline. Use the CLI runbook."],
+  [/^The snapshot was taken without a declared restore command; /, "The snapshot was taken without a restore command. Use the CLI runbook."],
+  [/^A restore saves the current data first, which needs the app's pre_release_backup$/, "A restore needs the application's pre-release backup. Use the CLI runbook."],
+];
+export function rejectionText(message) {
+  if (typeof message !== "string" || message.length > 300) return null;
+  return rejectionReasons.get(message) ||
+    rejectionPatterns.find(([pattern]) => pattern.test(message))?.[1] || null;
+}
 
 export function createControlServer(config, dependencies = {}) {
   const now = dependencies.now || Date.now;
@@ -150,7 +171,7 @@ export function createControlServer(config, dependencies = {}) {
     if (result.error) {
       const known = Object.hasOwn(executorErrors, result.error.code);
       const [status, message] = known ? executorErrors[result.error.code] : [502, "Executor could not complete the request."];
-      const reason = result.error.code === "rejected" && rejectionReasons.get(result.error.message);
+      const reason = result.error.code === "rejected" && rejectionText(result.error.message);
       fail(status, known ? result.error.code : "executor_error", reason || message);
     }
     return result;
@@ -236,8 +257,18 @@ export function createControlServer(config, dependencies = {}) {
           return send(200, { ok: true }, { "Set-Cookie": cookie(SESSION, "", 0) });
         }
         if (url.pathname === "/api/preview") {
-          exactKeys(body, ["app", "action"]);
+          // A rollback may name a stored release, save the data first and restore its snapshot.
+          const extra = Object.keys(body || {}).filter(key => !["app", "action"].includes(key));
+          exactKeys(body, ["app", "action", ...extra]);
           if (!appName(body.app) || !ACTIONS.includes(body.action)) fail(400, "invalid_request", "Unknown application or action.");
+          if (extra.length && (body.action !== "rollback" ||
+              extra.some(key => !["target", "backup", "restore"].includes(key)) ||
+              (Object.hasOwn(body, "target") && !releaseId(body.target)) ||
+              ["backup", "restore"].some(key => Object.hasOwn(body, key) && typeof body[key] !== "boolean"))) {
+            fail(400, "invalid_request", "Invalid rollback options.");
+          }
+          const options = extra.length ? { target: body.target ?? null, backup: body.backup === true,
+            restore: body.restore === true } : null;
           if (protectedName(body.app)) fail(403, "protected", "This application is protected.");
           if (FRESH_ACTIONS.includes(body.action) && now() - session.createdAt >= RECENT) {
             fail(403, "reauth_required", "Sign in again before this operation.");
@@ -247,8 +278,10 @@ export function createControlServer(config, dependencies = {}) {
           const app = list.apps.map(cleanApp).find(app => app.name === body.app);
           if (!app) fail(404, "not_found", "Application not found.");
           if (app.protected) fail(403, "protected", "This application is protected.");
-          const result = await call({ operation: "preview", actor: session.actor, app: body.app, action: body.action });
-          const preview = cleanPreview(result.preview, body.app, body.action, now());
+          const result = await call({ operation: "preview", actor: session.actor, app: body.app, action: body.action,
+            ...(options?.target ? { target: options.target } : {}),
+            ...(options?.backup ? { backup: true } : {}), ...(options?.restore ? { restore: true } : {}) });
+          const preview = cleanPreview(result.preview, body.app, body.action, now(), options);
           store.update(sessionId, entry => {
             for (const [id, value] of Object.entries(entry.previews)) {
               if (value.expiresAt * 1000 <= now()) delete entry.previews[id];
@@ -293,6 +326,11 @@ export function createControlServer(config, dependencies = {}) {
           const result = await call({ operation: "jobs", actor: session.actor });
           if (!Array.isArray(result.jobs) || result.jobs.length > 200) throw new Error("Invalid job list");
           return send(200, { jobs: result.jobs.map(cleanJob) });
+        }
+        const history = /^\/api\/apps\/([a-z][a-z0-9-]{0,39})\/releases$/.exec(url.pathname);
+        if (history) {
+          const result = await call({ operation: "releases", actor: session.actor, app: history[1] });
+          return send(200, cleanReleases(result, history[1]));
         }
         const match = /^\/api\/jobs\/([a-zA-Z0-9_-]{1,128})$/.exec(url.pathname);
         if (match) {

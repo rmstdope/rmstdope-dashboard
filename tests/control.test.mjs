@@ -8,8 +8,10 @@ import { spawnSync } from "node:child_process";
 import { configuration } from "../control/config.mjs";
 import { Store, IDLE, MAX_AGE, RECENT } from "../control/store.mjs";
 import { authenticate, authorizationURL } from "../control/oauth.mjs";
-import { createControlServer, rejectionReasons } from "../control/server.mjs";
-import { execute, LIMIT, cleanApp, cleanJob, cleanPreview } from "../control/executor.mjs";
+import { createControlServer, rejectionReasons, rejectionPatterns, rejectionText } from "../control/server.mjs";
+import {
+  execute, LIMIT, cleanApp, cleanJob, cleanPreview, cleanReleases, restoreFailures,
+} from "../control/executor.mjs";
 
 let counter = 0;
 const actor = "123456";
@@ -572,4 +574,149 @@ test("workers carry no link or public check; other profiles may not omit them", 
   for (const change of [{ url: null }, { publicHealth: "n/a" }, { profile: "static", url: null }]) {
     assert.throws(() => cleanApp({ ...app, ...change }), JSON.stringify(change));
   }
+});
+
+const target = "20261101T100000-aaaaaaaa", running = "20261110T100000-bbbbbbbb";
+const recorded = { status: "recorded", restorable: true, takenAt: "2026-11-10T09:59:00+00:00",
+  size: 14_200_000, kind: "pre-release" };
+function history(overrides = {}) {
+  return {
+    app: "example", busy: false, stateful: true, protected: false,
+    backup: { configured: true, restore: true },
+    releases: [
+      { release: running, current: true, previous: false, version: "v1.6.0", revision: "d".repeat(40),
+        outcome: "success", failedStep: null, createdAt: "2026-11-10T09:58:00+00:00",
+        completedAt: "2026-11-10T10:00:00+00:00", periods: [{ start: "2026-11-10T10:00:00+00:00", end: null }],
+        snapshot: { status: "pending", restorable: false } },
+      { release: target, current: false, previous: true, version: "v1.5.2", revision: "e".repeat(40),
+        outcome: "success", failedStep: null, createdAt: "2026-11-01T10:00:00+00:00",
+        completedAt: "2026-11-01T10:02:00+00:00",
+        periods: [{ start: "2026-11-01T10:02:00+00:00", end: "2026-11-10T10:00:00+00:00" }],
+        snapshot: recorded, lastRestore: { outcome: "failed", failedStep: "restore",
+          startedAt: "2026-11-02T10:00:00+00:00", completedAt: null } },
+    ],
+    ...overrides,
+  };
+}
+function planned(request, overrides = {}) {
+  return { preview: {
+    id: previewId, app: request.app, action: request.action, revision: "e".repeat(40), version: "v1.5.2",
+    expiresAt: 1_800_000_000 + 120.5, images: { web: "secret-digest" }, warning: "private executor detail",
+    release: request.target || target,
+    options: { backup: Boolean(request.backup), restore: Boolean(request.restore) },
+    snapshot: { ...recorded, skipReason: undefined }, ...overrides,
+  } };
+}
+
+test("release history is validated and passed through without private fields", async t => {
+  const f = await fixture(t, { execute: async request => request.operation === "releases" ? history() : { apps: [app] } });
+  const result = await f.request("/api/apps/example/releases");
+  assert.equal(result.status, 200);
+  assert.deepEqual(f.calls.at(-1), { operation: "releases", actor, app: "example" });
+  assert.deepEqual(result.json.backup, { configured: true, restore: true });
+  const [current, previous] = result.json.releases;
+  assert.equal(current.snapshot.status, "pending");
+  assert.deepEqual(previous.snapshot, { status: "recorded", restorable: true, takenAt: "2026-11-10T09:59:00.000Z",
+    size: 14_200_000, kind: "pre-release", skipReason: null });
+  assert.equal(previous.lastRestore.failedStep, "restore");
+  assert.deepEqual(Object.keys(previous).sort(), ["completedAt", "createdAt", "current", "failedStep",
+    "lastRestore", "outcome", "periods", "previous", "release", "revision", "snapshot", "version"]);
+  assert.equal((await f.request("/api/apps/Example/releases")).status, 404);
+  assert.equal((await f.request("/api/apps/example/releases", { auth: false })).status, 401);
+  for (const bad of [
+    { app: "other" }, { extra: true }, { busy: "no" }, { backup: { configured: true } },
+    { releases: [{ ...history().releases[0], release: "../state" }] },
+    { releases: [{ ...history().releases[0], snapshot: { status: "pending", restorable: true } }] },
+    { releases: [{ ...history().releases[1], snapshot: { ...recorded, file: "pre-release.dump" } }] },
+    { releases: [{ ...history().releases[1], snapshot: { ...recorded, takenAt: "yesterday" } }] },
+    { releases: [{ ...history().releases[1], version: "<script>" }] },
+    { releases: [history().releases[0], { ...history().releases[1], current: true }] },
+    { releases: [history().releases[1], history().releases[1]] },
+  ]) {
+    const broken = await fixture(t, { execute: async () => history(bad) });
+    assert.equal((await broken.request("/api/apps/example/releases")).status, 503, JSON.stringify(bad));
+  }
+  assert.throws(() => cleanReleases(history(), "other"), /Invalid executor releases/);
+});
+
+test("rollback previews carry a target and options, and restore warnings are fixed text", async t => {
+  const f = await fixture(t, { execute: async request => request.operation === "list" ? { apps: [app] } :
+    planned(request) });
+  const result = await f.request("/api/preview", { method: "POST",
+    body: { app: "example", action: "rollback", target, backup: true, restore: true } });
+  assert.equal(result.status, 200, result.text);
+  assert.deepEqual(f.calls.at(-1), { operation: "preview", actor, app: "example", action: "rollback",
+    target, backup: true, restore: true });
+  const { preview } = result.json;
+  assert.equal(preview.release, target);
+  assert.deepEqual(preview.options, { backup: true, restore: true });
+  assert.equal(preview.snapshot.status, "recorded");
+  assert.match(preview.warning, /^The current database is saved before the rollback\. Rolls back the application image, then restores the database to the target's snapshot from 2026-11-10T09:59:00Z\. Everything written since/);
+  assert.equal(result.text.includes("private executor"), false);
+  assert.equal(result.text.includes("secret-digest"), false);
+  const restore = await f.request("/api/preview", { method: "POST", body: { app: "example", action: "restore" } });
+  assert.match(restore.json.preview.warning, /^Restores the database to the running release's snapshot from 2026-11-10T09:59:00Z/);
+  for (const body of [
+    { app: "example", action: "restart", target },
+    { app: "example", action: "rollback", target: "../x" },
+    { app: "example", action: "rollback", backup: "yes" },
+    { app: "example", action: "rollback", command: "rm" },
+    { app: "example", action: "restore", restore: true },
+  ]) {
+    assert.equal((await f.request("/api/preview", { method: "POST", body })).status, 400, JSON.stringify(body));
+  }
+  for (const overrides of [{ options: { backup: false, restore: true } }, { release: running },
+    { snapshot: { status: "outdated", restorable: false } }]) {
+    const wrong = await fixture(t, { execute: async request => request.operation === "list" ? { apps: [app] } :
+      planned(request, overrides) });
+    assert.equal((await wrong.request("/api/preview", { method: "POST",
+      body: { app: "example", action: "rollback", target, backup: true, restore: true } })).status, 503,
+    JSON.stringify(overrides));
+  }
+  // A restore is never confirmed without a named, restorable snapshot.
+  assert.throws(() => cleanPreview({ id: previewId, app: "example", action: "restore", revision: null,
+    version: null, expiresAt: 1_800_000_000 + 60 }, "example", "restore", 1_800_000_000_000), /Invalid executor preview/);
+  // An executor without release history still previews a plain rollback.
+  assert.equal(cleanPreview({ id: previewId, app: "example", action: "rollback", revision: null, version: null,
+    expiresAt: 1_800_000_000 + 60 }, "example", "rollback", 1_800_000_000_000).release, undefined);
+  assert.throws(() => cleanPreview({ id: previewId, app: "example", action: "rollback", revision: null,
+    version: null, expiresAt: 1_800_000_000 + 60 }, "example", "rollback", 1_800_000_000_000,
+  { target, backup: false, restore: false }), /Invalid executor preview/);
+});
+
+test("rollback and restore rejections map to fixed text by shape only", async t => {
+  const cases = [
+    [`No restorable snapshot of ${target} (outdated)`, /no snapshot that can be restored/],
+    [`${target} is already running`, /already running/],
+    [`Release ${target} is not stored on this host`, /no longer stored/],
+    [`Release ${target} did not complete successfully`, /Only successful releases/],
+    ["db stops while the application is offline; restore it with the runbook in docs/operations.md", /data service stops/],
+  ];
+  for (const [executorMessage, expected] of cases) {
+    const reason = await (await fixture(t, { execute: async () => ({
+      error: { code: "rejected", message: executorMessage },
+    }) })).request("/api/apps");
+    assert.match(JSON.parse(reason.text).error.message, expected);
+    assert.equal(reason.text.includes(target), false);
+  }
+  for (const unsafe of [`Release /etc/passwd is not stored on this host`, `No restorable snapshot of ../x (`,
+    `${target} is already running /private/path`, "x".repeat(400)]) {
+    assert.equal(rejectionText(unsafe), null, unsafe);
+  }
+  assert.ok(rejectionPatterns.length >= 5);
+});
+
+test("only the executor's fixed restore failure texts reach job history", () => {
+  const job = { id: jobId, app: "example", action: "restore", status: "failed",
+    createdAt: 1_800_000_000, updatedAt: 1_800_000_001, revision: null };
+  for (const text of restoreFailures) {
+    assert.equal(cleanJob({ ...job, message: text }).message, text);
+    assert.equal(cleanJob({ ...job, action: "rollback", message: text }).message, text);
+    assert.equal(cleanJob({ ...job, action: "restart", message: text }).message,
+      "Operation failed. Inspect host recovery status.");
+  }
+  assert.equal(cleanJob({ ...job, message: "pg_restore: /srv/rmstdope/apps/x failed" }).message,
+    "Operation failed. Inspect host recovery status.");
+  assert.equal(cleanJob({ ...job, status: "succeeded", message: [...restoreFailures][0] }).message,
+    "Operation completed.");
 });

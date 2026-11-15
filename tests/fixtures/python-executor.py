@@ -39,7 +39,17 @@ manifest = {"revision": "a" * 40,
             "images": {"web": "ghcr.io/rmstdope/example@sha256:" + "a" * 64},
             "configuration_sha256": worker.configuration_hash(files), "outcome": "success"}
 worker.save_json(release_dir / "manifest.json", manifest)
-worker.save_json(host.app_root("example") / "state.json", {"current": release, "previous": None})
+# An older stored release, so the history has a rollback target.
+older = "20251201T000000-99999999"
+older_dir = host.release_dir("example", older)
+older_dir.mkdir(parents=True)
+for name, value in files.items():
+    (older_dir / name).write_text(value)
+(older_dir / "release.env").write_text("WEB_IMAGE=ghcr.io/rmstdope/example@sha256:" + "9" * 64 + "\n")
+worker.save_json(older_dir / "manifest.json", manifest | {
+    "revision": "9" * 40, "created": 1764547200.0, "completed": 1764547300.0, "history": 1})
+worker.save_json(release_dir / "manifest.json", manifest | {"created": 1767225600.0})
+worker.save_json(host.app_root("example") / "state.json", {"current": release, "previous": older})
 with redirect_stdout(sys.stderr):
     poller.baseline(settings, app)
 # A registered, not yet deployed headless worker: no domain, route or public check.

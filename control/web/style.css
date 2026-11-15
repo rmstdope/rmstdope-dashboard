@@ -16,3 +16,46 @@ dialog h2 { font-size: 22px; margin-bottom: 20px; }
 #confirm-error { min-height: 1.7em; margin-bottom: 16px; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 @media (max-width: 600px) { .topbar-actions { width: 100%; } .topbar-actions .button { flex: 1 1 auto; } .welcome { padding: 22px; } }
+#overview[hidden], #release-view[hidden] { display: none; }
+.release-breadcrumb { margin-bottom: 18px; }
+.release-breadcrumb a { color: var(--muted); }
+#release-message:not(:empty) { color: var(--warning); font-size: 12px; padding-bottom: 16px; }
+.release-tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.release-tiles .metric-value { font-size: 18px; letter-spacing: -.4px; }
+.toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; min-height: 44px; margin: 0; }
+.toggle input, .check input, .choice input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; margin: 2px 0 0; }
+.release-list { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; margin-bottom: 20px; }
+.release-row { display: grid; grid-template-columns: minmax(120px, 160px) minmax(160px, 230px) minmax(0, 1fr) minmax(150px, auto); gap: 18px; align-items: center; padding: 16px 20px; border-top: 1px solid var(--line); font-size: 12px; overflow-wrap: anywhere; }
+.release-row:first-child { border-top: 0; }
+.release-row.is-current { box-shadow: inset 3px 0 0 var(--accent); }
+.release-row.is-failed { background: var(--danger-bg); }
+.release-version { font-size: 14px; font-weight: 650; }
+.release-row .muted { font-size: 11px; display: block; margin-top: 4px; }
+.release-row .badge { margin-right: 6px; }
+.release-action { text-align: right; }
+.release-action .button { min-height: 44px; }
+.snapshot-text { line-height: 1.6; }
+.card-releases { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--sidebar); font-size: 12px; }
+.card-releases .eyebrow { margin-bottom: 6px; }
+.card-releases p { margin: 0 0 4px; }
+.card-releases .button { width: 100%; margin-top: 8px; }
+.confirm-details { list-style: none; padding: 0; margin: 0 0 16px; font-size: 12px; color: var(--muted); }
+.confirm-details li { padding: 2px 0; }
+.choice-group { border: 0; padding: 0; margin: 0 0 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.choice-group legend { font-size: 10px; font-weight: 700; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; padding: 0; }
+.choice, .check { display: flex; gap: 10px; align-items: flex-start; font-size: 12px; line-height: 1.6; color: var(--text); margin: 0 0 12px; }
+.choice { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; margin: 0; min-height: 44px; }
+.choice:has(input:checked) { border-color: var(--accent); background: var(--soft); }
+.choice:has(input:disabled) { opacity: .6; }
+.choice small, .check small { display: block; color: var(--muted); font-size: 11px; }
+.snapshot-box:not(:empty) { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--sidebar); font-size: 12px; line-height: 1.6; margin-bottom: 14px; }
+.snapshot-box .discard { color: var(--danger); font-weight: 650; }
+#rollback-error { color: var(--warning); font-size: 12px; min-height: 1.7em; margin-bottom: 12px; }
+#rollback-mode[hidden], #backup-row[hidden], #ack-row[hidden] { display: none; }
+@media (max-width: 900px) { .release-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .release-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .release-action { text-align: left; } }
+@media (max-width: 600px) { .release-tiles, .choice-group { grid-template-columns: minmax(0, 1fr); } .release-row { grid-template-columns: minmax(0, 1fr); gap: 10px; } .release-action .button { width: 100%; } }
+.warning-text { color: var(--warning); }
+#release-blocked[hidden] { display: none; }
+#rollback-summary { margin-bottom: 16px; }
+#release-heading:focus { outline: none; }
+#release-heading:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
