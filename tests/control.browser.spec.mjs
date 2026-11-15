@@ -654,7 +654,9 @@ test("a focused release action survives scheduled refreshes", async ({ page }) =
   await page.goto("/#releases/example");
   await expect(page.locator("#release-heading")).toBeFocused();
   const button = page.getByRole("button", { name: "Roll back to v1.5.2…" });
+  await expect(button).toBeEnabled();
   await button.focus();
+  await expect(button).toBeFocused();
   await page.clock.runFor(11_000);
   await expect(button).toBeFocused();
 });

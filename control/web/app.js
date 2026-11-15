@@ -29,6 +29,7 @@ let historyFailed = false;
 const releaseData = new Map();
 let summariesLoading = false, lastSummaries = 0;
 let rollbackTarget = null;
+let focusHeading = false;
 const SUMMARY_INTERVAL = 60_000;
 const visibleApps = collection(() => renderApps(latestApps), app => app.profile);
 function node(tag, value, className) {
@@ -46,6 +47,7 @@ function account(value) {
   $("#logout").hidden = !session;
   $("#control").hidden = !session;
   $("#welcome").hidden = Boolean(session);
+  if (session && focusHeading && currentView().app) { $("#release-heading").focus(); focusHeading = false; }
   if (!session) {
     $("#apps").replaceChildren(); $("#jobs").replaceChildren(); closePreview(); closeRollback();
     selectedActions.clear();
@@ -247,7 +249,9 @@ function route() {
   $("#release-view").hidden = !app;
   renderedReleases = null;
   if (app) {
-    if (changed) $("#release-heading").focus();
+    // Before sign-in is confirmed the section is hidden and cannot take focus; account() does it.
+    if (changed) focusHeading = true;
+    if (focusHeading && !$("#control").hidden) { $("#release-heading").focus(); focusHeading = false; }
     $("#release-app").textContent = title(app);
     $("#release-heading").textContent = `${title(app)} releases`;
     releaseMessage("");
