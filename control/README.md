@@ -228,7 +228,7 @@ The persistent cross-repository regression is `tests/cross-contract.mjs` with
 `tests/fixtures/python-executor.py`: it starts the actual Python
 `control.Executor`/`Server` and actual Node HTTP API, without mocking either
 protocol implementation. The separate `executor-contract` CI job checks out the
-reviewed infra commit `c351a5bf43877092f1e4a464c64088244ff084c8` and runs
+reviewed infra commit `7a5e36f730d69efe84620469d8493e6f5a8a7e4d` and runs
 `npm run test:contract` **only when private-repository access is configured**.
 The ordinary dashboard `GITHUB_TOKEN` cannot read the private infra repository.
 An authorized operator can provision `INFRA_CONTRACT_READ_TOKEN` as an Actions
