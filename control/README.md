@@ -46,7 +46,7 @@ Sessions are opaque 256-bit random tokens; only their SHA-256 hashes are saved
 in a private server-side store. Cookies are host-only `__Host-` cookies with
 `Secure; HttpOnly; SameSite=Lax; Path=/`, never localStorage. Sessions expire
 after 30 minutes without API activity or eight hours absolutely; polling an open
-tab counts as activity. Offline/online/update/restart/rollback require an OAuth
+tab counts as activity. Offline/online/update/restart/rollback/restore require an OAuth
 flow completed within 15 minutes, at both preview and confirmation. Sign-in
 rotates the previous session; logout revokes it. Removing an administrator from
 configuration revokes access after the service restarts with that configuration.
@@ -169,7 +169,8 @@ operation or extra request fields are forwarded:
 | Browser endpoint | Executor request |
 | --- | --- |
 | `GET /api/apps` | `{operation:"list",actor}` |
-| `POST /api/preview` body `{app,action}` | `{operation:"preview",actor,app,action}` |
+| `GET /api/apps/:app/releases` | `{operation:"releases",actor,app}` |
+| `POST /api/preview` body `{app,action}`; a rollback may add `target`, `backup`, `restore` | `{operation:"preview",actor,app,action[,target][,backup][,restore]}` |
 | `POST /api/submit` body `{previewId,idempotencyKey}` | `{operation:"submit",actor,previewId,idempotencyKey}` |
 | `GET /api/jobs` | `{operation:"jobs",actor}` |
 | `GET /api/jobs/:id` | `{operation:"job",actor,id}` |
@@ -179,7 +180,11 @@ session. `GET /auth/login` and `GET /auth/callback` implement OAuth.
 `POST /api/logout` accepts only `{}`. There are no other mutation routes.
 
 Actions are **`offline`, `online`, `pause`, `resume`, `update`, `restart`,
-`rollback`**. “Update now” is the UI label for wire action `update`.
+`rollback`, `restore`**. “Update now” is the UI label for wire action `update`.
+A rollback preview may name a stored release (`target`, a release ID), ask for a
+dump of the current data first (`backup: true`) and restore the target's snapshot
+(`restore: true`); other actions reject these keys. `restore` restores the running
+release's snapshot and takes no options.
 The executor owns immutable expiring preview IDs, state/release revalidation,
 durable jobs, serialized host locking and stable idempotency. The API binds each
 preview to its session and first confirmation key; a failed network submission
@@ -193,8 +198,20 @@ approved companion contract. Expiry/job timestamps are epoch seconds.
 The API validates and projects output; it replaces job messages and action
 warnings with fixed safe text and strips actor, images and release internals.
 Rejections show a fixed explanation only for exact allowlisted executor reasons
-(such as not enrolled or automation drift); unmatched reasons, other error codes
-and non-string messages fall back to the generic text.
+(such as not enrolled or automation drift), or for reasons that match an anchored
+pattern naming only a release ID or service (such as a target that is no longer
+stored); unmatched reasons, other error codes and non-string messages fall back
+to the generic text. Rollback and restore warnings are composed here from fixed
+text and the validated snapshot time. A failed restore job shows the executor's
+message only when it is one of its fixed texts, each of which says whether the
+application stayed offline.
+
+The release history (`releases`) is validated strictly: release IDs, outcomes,
+failed steps, ISO times, periods, snapshot states, sizes and skip reasons; a
+restorable snapshot must be `recorded`. Paths, dump file names, checksums and
+restore commands never reach the API. Any unexpected field or value fails the
+whole response closed, and the page then shows the history as unavailable rather
+than older rows.
 Job states are queued/running/succeeded/failed/interrupted. Unknown or stale
 health stays unknown; offline always displays unknown health and maintenance
 status. An older executor without card details yields explicit unknowns. Neither a pending job
@@ -205,9 +222,32 @@ no controls for them. Offline blocks resume/update/restart/rollback in the UI;
 the executor is authoritative against tampered/stale clients. Offline preserves
 Postgres and establishes maintenance; online verifies the current release and
 leaves updates paused. Manual availability/image actions leave updates paused.
-Rollback **does not restore the database**, and forward-only migrations may make
-an old image unsafe. Recovery-required apps require the host runbook, not a
-browser bypass. There are no database operations, secret editing or raw app logs.
+A rollback **does not restore the database** unless its snapshot is restored
+explicitly, and forward-only migrations may make an old image unsafe.
+Recovery-required apps require the host runbook, not a browser bypass. The only
+database operation is restoring a recorded snapshot; there is no secret editing
+or raw app logs.
+
+### Releases and backups
+
+Each card summarises the app's release history (refreshed at most once a minute
+while the overview is open): stored versions, how many older versions have a
+usable database snapshot, the last backup, and a failed latest attempt. Its
+**Releases and backups** link opens `#releases/<app>`: every stored version
+newest first with when it ran, the snapshot of the data it held
+(recorded/outdated/missing/not yet/none/unknown, with the reason when there is
+none), failed attempts (which can be hidden) and the last restore outcome.
+
+- **Roll back to …** opens a choice first: *Application only* or *Application and
+  database* (only when the target's snapshot is recorded and the app declares a
+  restore command), and *Back up the current database first* (default on when a
+  backup policy exists). A target without a usable snapshot needs an explicit
+  acknowledgement. The executor preview then follows as for every operation.
+- **Restore database…** appears on the running version when its own snapshot can
+  be restored (for example after an application-only rollback).
+- Anything that restores requires typing `restore <app>`, not just the name.
+- Actions are disabled while an infrastructure operation runs, and for offline,
+  recovery-required and protected apps.
 
 ## Development and delivery
 
@@ -228,7 +268,7 @@ The persistent cross-repository regression is `tests/cross-contract.mjs` with
 `tests/fixtures/python-executor.py`: it starts the actual Python
 `control.Executor`/`Server` and actual Node HTTP API, without mocking either
 protocol implementation. The separate `executor-contract` CI job checks out the
-reviewed infra commit `c351a5bf43877092f1e4a464c64088244ff084c8` and runs
+reviewed infra commit `eb03f843d5bbf2936fa133c7ae76e4766e4645fb` and runs
 `npm run test:contract` **only when private-repository access is configured**.
 The ordinary dashboard `GITHUB_TOKEN` cannot read the private infra repository.
 An authorized operator can provision `INFRA_CONTRACT_READ_TOKEN` as an Actions
@@ -242,7 +282,8 @@ To reproduce locally, set `INFRA_CHECKOUT` to that checkout and `PYTHON` to its
 inside this repository are written; there are no Docker operations or live
 credentials. Update the pinned commit deliberately when reviewing contract
 changes. The regression includes fractional timestamps, offline truncated
-revisions, actual pause job execution, idempotency and session actor attribution.
+revisions, actual pause job execution, idempotency, session actor attribution,
+the release history, rollback targets and the shapes of rollback rejections.
 
 Only successful **main push** CI publishes the tested control image and the
 separate **`control-deployment-manifest`** artifact (`control-deployment.json`,

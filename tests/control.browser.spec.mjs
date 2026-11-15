@@ -50,6 +50,7 @@ async function setup(page, options = {}) {
         id: "c".repeat(32), ...request, expiresAt: Math.floor(Date.now() / 1000) + 120,
         revision: app.revision, version: app.version,
         warning: "The database is NOT rolled back. Automatic updates remain paused.",
+        ...(options.previewExtra ? options.previewExtra(request) : {}),
       } });
     }
     if (url.pathname === "/api/submit") {
@@ -487,7 +488,9 @@ test("worker cards have no link, show not-applicable public health and keep oper
   await expect(row("Type")).toHaveText("Worker (stateful)");
   await expect(row("Public HTTPS")).toHaveText("Not applicable");
   await expect(card.getByText("Background worker · no web address")).toBeVisible();
-  await expect(card.getByRole("link")).toHaveCount(0);
+  // No web address; the only link opens the release history.
+  await expect(card.getByRole("link")).toHaveCount(1);
+  await expect(card.getByRole("link", { name: "Releases and backups" })).toHaveAttribute("href", "#releases/atlantis-oracle");
   await expect(card.getByRole("combobox", { name: "Operation for atlantis-oracle" })).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -500,4 +503,147 @@ test("offline workers stay unknown and never gain a public check or last-known s
   await expect(card.locator(".badge")).toHaveText("maintenance");
   await expect(row("Public HTTPS")).toHaveText("Not applicable");
   await expect(row("Health")).toHaveText("Unknown");
+});
+
+const target = "20261101T100000-aaaaaaaa", running = "20261110T100000-bbbbbbbb";
+const older = "20261020T100000-cccccccc", failed = "20261115T030000-dddddddd";
+const recorded = { status: "recorded", restorable: true, takenAt: "2026-11-10T09:59:00.000Z",
+  size: 14_200_000, kind: "pre-release", skipReason: null };
+function releaseHistory(overrides = {}) {
+  const base = { version: null, revision: "e".repeat(40), failedStep: null, lastRestore: null, outcome: "success",
+    createdAt: "2026-11-01T10:00:00.000Z", completedAt: "2026-11-01T10:02:00.000Z" };
+  return {
+    app: "example", busy: false, stateful: true, protected: false,
+    backup: { configured: true, restore: true },
+    releases: [
+      { ...base, release: failed, current: false, previous: false, version: "v1.6.1", outcome: "failed",
+        failedStep: "backup", createdAt: "2026-11-15T03:00:00.000Z", completedAt: "2026-11-15T03:05:00.000Z",
+        periods: [], snapshot: { status: "none", restorable: false, takenAt: null, size: null, kind: null, skipReason: null } },
+      { ...base, release: running, current: true, previous: false, version: "v1.6.0",
+        createdAt: "2026-11-10T09:58:00.000Z", periods: [{ start: "2026-11-10T10:00:00.000Z", end: null }],
+        snapshot: { status: "pending", restorable: false, takenAt: null, size: null, kind: null, skipReason: null } },
+      { ...base, release: target, current: false, previous: true, version: "v1.5.2",
+        periods: [{ start: "2026-11-01T10:02:00.000Z", end: "2026-11-10T10:00:00.000Z" }], snapshot: recorded },
+      { ...base, release: older, current: false, previous: false, version: "v1.5.0",
+        createdAt: "2026-10-20T10:00:00.000Z",
+        periods: [{ start: "2026-10-20T10:02:00.000Z", end: "2026-11-01T10:02:00.000Z" }],
+        snapshot: { status: "none", restorable: false, takenAt: null, size: null, kind: null, skipReason: "operator" } },
+    ],
+    ...overrides,
+  };
+}
+function withHistory(value = () => releaseHistory(), extra = {}) {
+  return {
+    override: path => path === "/api/apps/example/releases" ? { json: value() } :
+      path.endsWith("/releases") ? { status: 404, json: { error: { message: "Not found." } } } : null,
+    ...extra,
+  };
+}
+
+test("cards summarise releases and open a release page with snapshot states", async ({ page }) => {
+  const { errors } = await setup(page, withHistory());
+  const card = page.locator(".app-card").filter({ has: page.getByRole("heading", { name: "Example", exact: true }) });
+  await expect(card.getByText("3 stored versions")).toBeVisible();
+  await expect(card.getByText("1 of 2 older versions have a usable database snapshot")).toBeVisible();
+  await expect(card.getByText("v1.6.1 stopped at the pre-release backup; the running version kept running.")).toBeVisible();
+  // The protected app's history fails to load; its card says so instead of loading forever.
+  const control = page.locator(".app-card").filter({ has: page.getByRole("heading", { name: "Control", exact: true }) });
+  await expect(control.getByText("Release history unavailable.")).toBeVisible();
+  await card.getByRole("link", { name: "Releases and backups" }).click();
+  await expect(page.getByRole("heading", { name: "Example releases" })).toBeVisible();
+  const rows = page.locator(".release-row");
+  await expect(rows).toHaveCount(4);
+  await expect(rows.nth(0)).toContainText("Attempt failed");
+  await expect(rows.nth(0)).toContainText("Not a rollback target");
+  await expect(rows.nth(1)).toContainText("Taken automatically when the next release starts.");
+  await expect(rows.nth(2)).toContainText("Recorded");
+  await expect(rows.nth(3)).toContainText("--skip-backup");
+  await expect(page.getByRole("button", { name: "Restore database…" })).toHaveCount(0);
+  await page.getByLabel("Show failed attempts").uncheck();
+  await expect(rows).toHaveCount(3);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.getByRole("link", { name: "Applications" }).first().click();
+  await expect(page.locator("#release-view")).toBeHidden();
+  await expect(page.locator(".app-card").first()).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("rolling back with a restore sends the target and options and needs the restore phrase", async ({ page }) => {
+  const { previews, submits, errors } = await setup(page, withHistory(undefined, {
+    previewExtra: request => ({ release: request.target, options: { backup: request.backup === true,
+      restore: request.restore === true }, snapshot: recorded,
+    warning: "Rolls back the application image, then restores the database." }),
+  }));
+  await page.goto("/#releases/example");
+  await page.getByRole("button", { name: "Roll back to v1.5.2…" }).click();
+  const dialog = page.locator("#rollback-dialog");
+  await expect(dialog.getByText("From v1.6.0.")).toBeVisible();
+  await dialog.getByLabel(/Application and database/).check();
+  await expect(dialog.getByText(/Restoring discards everything written since/)).toBeVisible();
+  await expect(dialog.getByLabel(/Back up the current database first/)).toBeChecked();
+  await dialog.getByRole("button", { name: "Preview" }).click();
+  expect(previews).toEqual([{ app: "example", action: "rollback", target, backup: true, restore: true }]);
+  const confirmation = page.locator("#confirmation");
+  await expect(confirmation.getByText('Type "restore example" to confirm')).toBeVisible();
+  await expect(confirmation.getByText(`Release ID ${target}`)).toBeVisible();
+  await confirmation.getByLabel('Type "restore example" to confirm').fill("example");
+  await confirmation.getByRole("button", { name: "Confirm restore" }).click();
+  await expect(confirmation.getByText("Confirmation text does not match.")).toBeVisible();
+  expect(submits).toEqual([]);
+  await confirmation.getByLabel('Type "restore example" to confirm').fill("restore example");
+  await confirmation.getByRole("button", { name: "Confirm restore" }).click();
+  await expect(confirmation).toBeHidden();
+  expect(submits).toHaveLength(1);
+  await expect(page.locator("#release-message")).toContainText("accepted");
+  expect(errors).toEqual([]);
+});
+
+test("a target without a usable snapshot offers no restore and needs an acknowledgement", async ({ page }) => {
+  const { previews } = await setup(page, withHistory());
+  await page.goto("/#releases/example");
+  await page.getByRole("button", { name: "Roll back to v1.5.0…" }).click();
+  const dialog = page.locator("#rollback-dialog");
+  await expect(dialog.getByLabel(/Application and database/)).toBeDisabled();
+  await expect(dialog.getByText("Not available: the snapshot is none.")).toBeVisible();
+  await dialog.getByLabel(/Back up the current database first/).uncheck();
+  await dialog.getByRole("button", { name: "Preview" }).click();
+  await expect(dialog.getByText("Confirm that you understand no usable snapshot exists.")).toBeVisible();
+  expect(previews).toEqual([]);
+  await dialog.getByLabel("I understand that no usable snapshot of v1.5.0 exists.").check();
+  await dialog.getByRole("button", { name: "Preview" }).click();
+  expect(previews).toEqual([{ app: "example", action: "rollback", target: older }]);
+  await expect(page.locator("#confirmation").getByText("Type the application name to confirm")).toBeVisible();
+});
+
+test("the running version's restorable snapshot can be restored on its own", async ({ page }) => {
+  const history = releaseHistory();
+  history.releases[1] = { ...history.releases[1], snapshot: { ...recorded, kind: "pre-rollback" } };
+  const { previews } = await setup(page, withHistory(() => history, {
+    previewExtra: request => ({ release: running, options: { backup: false, restore: false }, snapshot: recorded }),
+  }));
+  await page.goto("/#releases/example");
+  await page.getByRole("button", { name: "Restore database…" }).click();
+  expect(previews).toEqual([{ app: "example", action: "restore" }]);
+  await expect(page.locator("#confirm-title")).toHaveText("Restore database: example");
+  await expect(page.locator("#confirmation").getByText('Type "restore example" to confirm')).toBeVisible();
+});
+
+test("release actions are unavailable while an operation runs or the app is offline", async ({ page }) => {
+  await setup(page, withHistory(() => releaseHistory({ busy: true })));
+  await page.goto("/#releases/example");
+  await expect(page.locator("#release-blocked")).toHaveText(/infrastructure operation is running/);
+  await expect(page.getByRole("button", { name: "Roll back to v1.5.2…" })).toBeDisabled();
+});
+
+test("a failed release history load is explicit and never shows old rows", async ({ page }) => {
+  let fail = false;
+  await setup(page, { override: path => path === "/api/apps/example/releases" ? (fail ?
+    { status: 503, json: { error: { message: "Control service is temporarily unavailable." } } } :
+    { json: releaseHistory() }) : null });
+  await page.goto("/#releases/example");
+  await expect(page.locator(".release-row")).toHaveCount(4);
+  fail = true;
+  await page.getByRole("button", { name: "Refresh" }).last().click();
+  await expect(page.locator(".release-row")).toHaveCount(0);
+  await expect(page.getByText(/Release history unavailable/)).toBeVisible();
 });

@@ -24,13 +24,14 @@
         <section id="welcome" class="welcome" hidden><p class="eyebrow">YOUR OPERATIONS WORKSPACE</p><h1>Your applications. Your control.</h1><p class="subtitle">Sign in with your authorized GitHub account to manage availability, review updates and track operations. Every change starts with a preview.</p></section>
         <p id="message" role="status" aria-live="polite"></p>
         <section id="control" hidden>
+          <div id="overview">
           <div class="page-heading"><div><p class="eyebrow">AUTHORIZED OPERATIONS</p><h1>Application control</h1><p class="subtitle">Manage availability and releases with explicit, verified operations.</p></div><button id="refresh" class="button">Refresh</button></div>
           <section class="metrics" aria-label="Application overview">
             <div class="metric"><span class="metric-label">APPLICATION HEALTH</span><strong id="health-value" class="metric-value">—</strong><span class="metric-description">Applications currently healthy</span></div>
             <div class="metric"><span class="metric-label">AUTOMATIC UPDATES</span><strong id="automation-value" class="metric-value">—</strong><span class="metric-description">Applications with automatic updates</span></div>
             <div class="metric"><span class="metric-label">MAINTENANCE</span><strong id="maintenance-value" class="metric-value">—</strong><span class="metric-description">Applications intentionally offline</span></div>
           </section>
-          <p class="notice"><strong>Preview first. Apply with confidence.</strong> Manual availability and image operations leave automatic updates paused. Bringing an application online does not resume updates. Database administration and raw logs remain outside this panel.</p>
+          <p class="notice"><strong>Preview first. Apply with confidence.</strong> Manual availability and image operations leave automatic updates paused. Bringing an application online does not resume updates. The only database operation is restoring a recorded snapshot from an application's release page; other database administration and raw logs remain outside this panel.</p>
           <section id="applications" aria-labelledby="applications-heading">
             <div class="section-heading"><div><h2 id="applications-heading">Registered applications</h2><p id="summary" class="section-description"></p></div><p id="updated" class="collection-meta"></p></div>
             <div class="collection-toolbar"><div class="filters" role="group" aria-label="Application type"><button class="filter" data-filter="all" aria-pressed="true">All apps</button><button class="filter" data-filter="frontend" aria-pressed="false">Frontend</button><button class="filter" data-filter="fullstack" aria-pressed="false">Fullstack</button><button class="filter" data-filter="worker" aria-pressed="false">Worker</button></div><label class="sr-only" for="search">Find an application</label><input class="search" id="search" type="search" placeholder="Find an application…" autocomplete="off"></div>
@@ -40,6 +41,19 @@
             <div class="section-heading history-heading"><div><h2 id="history-heading">Operation history</h2><p class="section-description">Jobs run one at a time. Closing this page does not cancel an accepted operation.</p></div><span class="collection-meta">5-second refresh</span></div>
             <ol id="jobs" aria-label="Operation history"></ol>
           </section>
+          </div>
+          <section id="release-view" aria-labelledby="release-heading" hidden>
+            <nav class="breadcrumb release-breadcrumb" aria-label="Breadcrumb"><a href="#applications">Applications</a><span aria-hidden="true">/</span><strong id="release-app"></strong></nav>
+            <div class="page-heading"><div><p class="eyebrow">RELEASES AND BACKUPS</p><h1 id="release-heading">Releases</h1><p class="subtitle">Every version stored on the host, newest first. Roll back to any successful version. Each database snapshot is shown next to the version whose data it holds.</p></div><button id="release-refresh" class="button" type="button">Refresh</button></div>
+            <p id="release-message" role="status" aria-live="polite"></p>
+            <p id="release-blocked" class="warning" hidden></p>
+            <section id="release-tiles" class="metrics release-tiles" aria-label="Release overview"></section>
+            <section aria-labelledby="stored-heading">
+              <div class="section-heading"><div><h2 id="stored-heading">Stored versions</h2><p class="section-description">Older versions are removed by retention; the running and previous versions are always kept.</p></div><label class="toggle"><input type="checkbox" id="show-failed" checked> Show failed attempts</label></div>
+              <ol id="release-list" class="release-list" aria-label="Stored versions"></ol>
+            </section>
+            <p class="notice"><strong>A rollback changes images only, unless you choose to restore the target's snapshot.</strong> Restoring discards everything written after the snapshot was taken, so it always saves the current data first and needs its own typed confirmation.</p>
+          </section>
         </section>
         <footer><span>Restricted controls. Confirmed changes. Durable operations.</span><span>Independent SSH recovery.</span></footer>
       </main>
@@ -48,10 +62,26 @@
   <dialog id="confirmation" aria-labelledby="confirm-title">
     <form id="confirm-form">
       <p class="eyebrow">REVIEW BEFORE APPLYING</p><h2 id="confirm-title">Confirm operation</h2>
-      <p id="effects" class="warning"></p><p id="target"></p><p id="expiry"></p>
-      <label for="confirm-name">Type the application name to confirm</label><input class="confirmation-input" id="confirm-name" autocomplete="off" required maxlength="40">
+      <p id="effects" class="warning"></p><p id="target"></p><ul id="confirm-details" class="confirm-details"></ul><p id="expiry"></p>
+      <label id="confirm-label" for="confirm-name">Type the application name to confirm</label><input class="confirmation-input" id="confirm-name" autocomplete="off" required maxlength="40">
       <p id="confirm-error" role="alert"></p>
       <div class="actions"><button id="cancel" class="button" type="button">Cancel</button><button id="confirm" class="button button-primary" type="submit">Confirm operation</button></div>
+    </form>
+  </dialog>
+  <dialog id="rollback-dialog" aria-labelledby="rollback-title">
+    <form id="rollback-form">
+      <p class="eyebrow">CHOOSE WHAT TO CHANGE</p><h2 id="rollback-title">Roll back</h2>
+      <p id="rollback-summary" class="muted"></p>
+      <fieldset id="rollback-mode" class="choice-group">
+        <legend>What to change</legend>
+        <label class="choice"><input type="radio" name="rollback-mode" value="image" checked><span><strong>Application only</strong><small>The database stays as it is now.</small></span></label>
+        <label class="choice"><input type="radio" name="rollback-mode" value="restore" id="mode-restore"><span><strong>Application and database</strong><small id="restore-note"></small></span></label>
+      </fieldset>
+      <div id="rollback-snapshot" class="snapshot-box"></div>
+      <label class="check" id="backup-row"><input type="checkbox" id="rollback-backup" checked><span><strong>Back up the current database first</strong><small>Recommended. Stores a snapshot of the running version's data, so it can be restored later.</small></span></label>
+      <label class="check" id="ack-row"><input type="checkbox" id="rollback-ack"><span id="ack-text"></span></label>
+      <p id="rollback-error" role="alert"></p>
+      <div class="actions"><button id="rollback-cancel" class="button" type="button">Cancel</button><button id="rollback-preview" class="button button-primary" type="submit">Preview</button></div>
     </form>
   </dialog>
 </body>

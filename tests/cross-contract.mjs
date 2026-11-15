@@ -84,6 +84,26 @@ try {
   assert.equal(headless.profile, "worker");
   assert.equal(headless.publicHealth, "n/a");
   assert.equal(headless.status, "not-deployed");
+  const history = await api("apps/example/releases");
+  assert.deepEqual(history.releases.map(entry => [entry.release, entry.current, entry.previous]), [
+    ["20260101T000000-aaaaaaaa", true, false], ["20251201T000000-99999999", false, true]]);
+  assert.equal(history.releases[1].outcome, "success");
+  assert.equal(history.releases[1].snapshot.status, "none");
+  assert.deepEqual(history.backup, { configured: false, restore: false });
+  const rollback = (await api("preview", { app: "example", action: "rollback",
+    target: "20251201T000000-99999999" })).preview;
+  assert.equal(rollback.release, "20251201T000000-99999999");
+  assert.deepEqual(rollback.options, { backup: false, restore: false });
+  assert.equal(rollback.revision, "9".repeat(40));
+  const absent = await api("preview", { app: "example", action: "rollback",
+    target: "20990101T000000-abcdef12" }, 409);
+  assert.equal(absent.error.message, "That release is no longer stored. Refresh the release history.");
+  const unrestorable = await api("preview", { app: "example", action: "rollback",
+    target: "20251201T000000-99999999", restore: true }, 409);
+  assert.equal(unrestorable.error.message, "That release has no snapshot that can be restored. Refresh the release history.");
+  const noBackup = await api("preview", { app: "example", action: "rollback",
+    target: "20251201T000000-99999999", backup: true }, 409);
+  assert.equal(noBackup.error.message, "No pre-release backup is configured for this application.");
   const { preview } = await api("preview", { app: "example", action: "pause" });
   assert.equal(typeof preview.expiresAt, "number");
   assert.equal(Number.isInteger(preview.expiresAt), false);
@@ -117,7 +137,7 @@ try {
   assert.equal(offline.apps[0].desired, "offline");
   assert.equal(offline.apps[0].revision, "a".repeat(12));
   assert.equal(offline.apps[0].health, "unknown");
-  console.log("PASS real Node API → Python Executor/Server: list, fractional preview/job timestamps, submit/idempotency, session actor audit, executed pause, job/history, rejection shape, spoof denial, offline short revision, headless worker without link, real collector feed and deployed worker health");
+  console.log("PASS real Node API → Python Executor/Server: list, release history, rollback target and option rejections, fractional preview/job timestamps, submit/idempotency, session actor audit, executed pause, job/history, rejection shape, spoof denial, offline short revision, headless worker without link, real collector feed and deployed worker health");
 } finally {
   if (server) {
     server.closeAllConnections();
