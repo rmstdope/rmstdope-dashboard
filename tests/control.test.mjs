@@ -673,6 +673,9 @@ test("rollback previews carry a target and options, and restore warnings are fix
       body: { app: "example", action: "rollback", target, backup: true, restore: true } })).status, 503,
     JSON.stringify(overrides));
   }
+  // A restore is never confirmed without a named, restorable snapshot.
+  assert.throws(() => cleanPreview({ id: previewId, app: "example", action: "restore", revision: null,
+    version: null, expiresAt: 1_800_000_000 + 60 }, "example", "restore", 1_800_000_000_000), /Invalid executor preview/);
   // An executor without release history still previews a plain rollback.
   assert.equal(cleanPreview({ id: previewId, app: "example", action: "rollback", revision: null, version: null,
     expiresAt: 1_800_000_000 + 60 }, "example", "rollback", 1_800_000_000_000).release, undefined);

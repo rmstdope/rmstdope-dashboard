@@ -202,7 +202,8 @@ export function cleanPreview(preview, app, action, now, options = null) {
       !revision(preview.revision) || !version(preview.version)) throw new Error("Invalid executor preview");
   // Rollback and restore previews from this executor name the release and its snapshot.
   const planned = ["rollback", "restore"].includes(action) && preview.release !== undefined;
-  if (options && !planned) throw new Error("Invalid executor preview");
+  // A restore is only confirmed against a named, restorable snapshot.
+  if ((options || action === "restore") && !planned) throw new Error("Invalid executor preview");
   let snapshot = null, release = null, granted = null;
   if (planned) {
     release = preview.release;

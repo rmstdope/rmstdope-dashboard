@@ -544,7 +544,7 @@ test("cards summarise releases and open a release page with snapshot states", as
   const { errors } = await setup(page, withHistory());
   const card = page.locator(".app-card").filter({ has: page.getByRole("heading", { name: "Example", exact: true }) });
   await expect(card.getByText("3 stored versions")).toBeVisible();
-  await expect(card.getByText("1 of 2 older versions have a usable database snapshot")).toBeVisible();
+  await expect(card.getByText("1 of 2 older versions have a recorded database snapshot")).toBeVisible();
   await expect(card.getByText("v1.6.1 stopped at the pre-release backup; the running version kept running.")).toBeVisible();
   // The protected app's history fails to load; its card says so instead of loading forever.
   const control = page.locator(".app-card").filter({ has: page.getByRole("heading", { name: "Control", exact: true }) });
@@ -646,4 +646,29 @@ test("a failed release history load is explicit and never shows old rows", async
   await page.getByRole("button", { name: "Refresh" }).last().click();
   await expect(page.locator(".release-row")).toHaveCount(0);
   await expect(page.getByText(/Release history unavailable/)).toBeVisible();
+});
+
+test("a focused release action survives scheduled refreshes", async ({ page }) => {
+  await page.clock.install();
+  await setup(page, withHistory());
+  await page.goto("/#releases/example");
+  await expect(page.locator("#release-heading")).toBeFocused();
+  const button = page.getByRole("button", { name: "Roll back to v1.5.2…" });
+  await button.focus();
+  await page.clock.runFor(11_000);
+  await expect(button).toBeFocused();
+});
+
+test("a failed application refresh blocks release actions instead of trusting stale state", async ({ page }) => {
+  let fail = false;
+  await page.clock.install();
+  await setup(page, withHistory(undefined, { override: path => path === "/api/apps/example/releases" ?
+    { json: releaseHistory() } : path === "/api/apps" && fail ?
+      { status: 503, json: { error: { message: "Control service is temporarily unavailable." } } } : null }));
+  await page.goto("/#releases/example");
+  await expect(page.getByRole("button", { name: "Roll back to v1.5.2…" })).toBeEnabled();
+  fail = true;
+  await page.clock.runFor(6_000);
+  await expect(page.locator("#release-blocked")).toHaveText(/refresh failed/);
+  await expect(page.getByRole("button", { name: "Roll back to v1.5.2…" })).toBeDisabled();
 });

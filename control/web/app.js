@@ -240,9 +240,14 @@ function currentView() {
 }
 function route() {
   const { app } = currentView();
+  // A preview names its app and release, but a dialog from another view would only confuse.
+  if (!busy) { closePreview(); closeRollback(); }
+  const changed = $("#release-view").hidden === Boolean(app);
   $("#overview").hidden = Boolean(app);
   $("#release-view").hidden = !app;
+  renderedReleases = null;
   if (app) {
+    if (changed) $("#release-heading").focus();
     $("#release-app").textContent = title(app);
     $("#release-heading").textContent = `${title(app)} releases`;
     releaseMessage("");
@@ -253,17 +258,22 @@ function route() {
   }
 }
 function releaseMessage(value) { $("#release-message").textContent = value; }
+let releaseSequence = 0;
 async function loadReleases(app, force = false) {
   const entry = releaseData.get(app);
   if (!force && entry?.loading) return;
-  releaseData.set(app, { ...entry, loading: true });
+  // Only the newest request for an app may store its answer; an older one finishing later is dropped.
+  const sequence = ++releaseSequence;
+  releaseData.set(app, { ...entry, loading: sequence });
+  let result;
   try {
-    const data = await api(`apps/${app}/releases`);
-    releaseData.set(app, { data, error: null, loadedAt: Date.now() });
+    result = { data: await api(`apps/${app}/releases`), error: null };
   } catch (error) {
     // A failed reload never leaves old history looking current.
-    releaseData.set(app, { data: null, error: error.message, loadedAt: Date.now() });
+    result = { data: null, error: error.message };
   }
+  if (!session || releaseData.get(app)?.loading !== sequence) return;
+  releaseData.set(app, { ...result, loadedAt: Date.now() });
   if (currentView().app === app) renderReleases(); else if (session) renderApps(latestApps);
 }
 async function loadSummaries() {
@@ -288,13 +298,13 @@ function releaseSummary(app) {
     const stored = data.releases.filter(release => release.outcome === "success").length;
     box.append(node("p", `${stored} stored version${stored === 1 ? "" : "s"}`));
     if (!data.stateful) {
-      box.append(node("p", "No database. Any stored version can be restored.", "muted"));
+      box.append(node("p", "No database. You can roll back to any stored version.", "muted"));
     } else if (!data.backup.configured) {
       box.append(node("p", "Database backups not configured: a rollback changes images only.", "muted"));
     } else {
       const older = data.releases.filter(release => release.outcome === "success" && !release.current);
       const usable = older.filter(release => release.snapshot.status === "recorded").length;
-      box.append(node("p", `${usable} of ${older.length} older version${older.length === 1 ? " has" : "s have"} a usable database snapshot`));
+      box.append(node("p", `${usable} of ${older.length} older version${older.length === 1 ? " has" : "s have"} a recorded database snapshot`));
       const latest = data.releases.map(release => release.snapshot.takenAt).filter(Boolean).sort().at(-1);
       box.append(node("p", latest ? `Last backup ${when(latest)}` : "No backup taken yet", "muted"));
     }
@@ -322,7 +332,7 @@ function period(release) {
 function snapshotText(data, release) {
   const snapshot = release.snapshot;
   if (!data.stateful) return "No database.";
-  const taken = snapshot.takenAt ? `Taken ${when(snapshot.takenAt)}` : "";
+  const taken = snapshot.takenAt ? `Taken ${when(snapshot.takenAt)}` : "Taken at an unknown time";
   switch (snapshot.status) {
     case "recorded": return `${taken}${snapshot.kind === "pre-rollback" ? " before a rollback" : " just before the next version started"} · ${size(snapshot.size)}` +
       (snapshot.restorable ? "" : " · no restore command recorded (CLI runbook)");
@@ -334,19 +344,25 @@ function snapshotText(data, release) {
   }
 }
 function actionsAllowed(app, data) {
-  if (!app) return "Application state unknown. Refresh first.";
+  if (!app || refreshFailed) return "Application state unknown: refresh failed. Actions return when it succeeds.";
   if (data.protected || app.protected) return "Protected application: use the reviewed host workflow.";
   if (data.busy || operationRunning || refreshDeferred) return "An infrastructure operation is running; actions are unavailable until it finishes.";
   if (app.recoveryRequired) return "Recovery required: use the host recovery runbook.";
   if (app.desired === "offline") return "The application is offline. Bring it online first.";
   return null;
 }
+let renderedReleases = null;
 function renderReleases() {
   const { app: name } = currentView();
   if (!name) return;
   const entry = releaseData.get(name);
   const data = entry?.data;
   const app = latestApps.find(item => item.name === name);
+  // Rebuild only when something shown changes, so a focused button survives the refresh.
+  const snapshot = JSON.stringify([name, data ?? null, entry?.error ?? null, app ?? null, refreshFailed,
+    refreshDeferred, operationRunning, busy, $("#show-failed").checked]);
+  if (snapshot === renderedReleases) return;
+  renderedReleases = snapshot;
   $("#release-tiles").replaceChildren();
   $("#release-list").replaceChildren();
   $("#release-blocked").hidden = true;
@@ -625,6 +641,7 @@ async function refresh(showMessage = true) {
       refreshDeferred = false;
       operationRunning = false;
       if (session) renderApps(latestApps);
+      renderReleases();
       message(refreshFailureMessage);
       $("#updated").textContent = "State unknown — refresh failed";
     }

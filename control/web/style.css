@@ -33,7 +33,7 @@ dialog h2 { font-size: 22px; margin-bottom: 20px; }
 .release-row .muted { font-size: 11px; display: block; margin-top: 4px; }
 .release-row .badge { margin-right: 6px; }
 .release-action { text-align: right; }
-.release-action .button { min-height: 40px; }
+.release-action .button { min-height: 44px; }
 .snapshot-text { line-height: 1.6; }
 .card-releases { margin: 0 0 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--sidebar); font-size: 12px; }
 .card-releases .eyebrow { margin-bottom: 6px; }
@@ -57,3 +57,5 @@ dialog h2 { font-size: 22px; margin-bottom: 20px; }
 .warning-text { color: var(--warning); }
 #release-blocked[hidden] { display: none; }
 #rollback-summary { margin-bottom: 16px; }
+#release-heading:focus { outline: none; }
+#release-heading:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
